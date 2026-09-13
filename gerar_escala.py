@@ -651,21 +651,34 @@ def escolher_pessoa(
 # FOLGAS
 # ============================================================
 
-def escolher_folgas(
+def teve_folga_na_ultima_semana(historico, pessoa):
+    ultima = ultima_semana_participada(
+        historico,
+        pessoa,
+    )
+
+    if ultima is None:
+        return False
+
+    return (
+        ultima["dom_seg_ter"] == "FOLGA"
+        or ultima["qui_sex_sab"] == "FOLGA"
+    )
+
+
+def escolher_folga_inicio(
     presentes,
     folgas_obrigatorias,
     historico,
     data_semana,
 ):
-    qtd_presentes = len(presentes)
-
     qtd_folgas_inicio = (
-        qtd_presentes
+        len(presentes)
         - len(TAREFAS_INICIO)
     )
 
     qtd_folgas_fim = (
-        qtd_presentes
+        len(presentes)
         - len(TAREFAS_FIM)
     )
 
@@ -686,79 +699,196 @@ def escolher_folgas(
             "Não é possível cumprir todas as folgas obrigatórias nesta semana."
         )
 
+    obrigatorias = set(folgas_obrigatorias)
+
+    # Precisamos deixar para o segundo bloco, no máximo,
+    # a quantidade de folgas que realmente cabe nele.
+    minimo_obrigatorias_no_inicio = max(
+        0,
+        len(obrigatorias) - qtd_folgas_fim,
+    )
+
     possibilidades = []
 
-    for folga_inicio_tuple in itertools.combinations(
+    for combo in itertools.combinations(
         presentes,
         qtd_folgas_inicio,
     ):
-        folga_inicio = set(folga_inicio_tuple)
+        folgas = set(combo)
 
-        # 13/09: Komixão = Panos
+        # 13/09: Komixão precisa fazer Panos no primeiro bloco.
         if (
             data_semana == datetime(2026, 9, 13)
-            and "KOMIXÃO" in folga_inicio
+            and "KOMIXÃO" in folgas
         ):
             continue
 
-        for folga_fim_tuple in itertools.combinations(
-            presentes,
-            qtd_folgas_fim,
+        obrigatorias_escolhidas = len(
+            folgas & obrigatorias
+        )
+
+        if (
+            obrigatorias_escolhidas
+            < minimo_obrigatorias_no_inicio
         ):
-            folga_fim = set(folga_fim_tuple)
+            continue
 
-            pessoas_com_folga = (
-                folga_inicio | folga_fim
+        # Prioridades, nesta ordem:
+        # 1) colocar o maior número possível de folgas obrigatórias aqui;
+        # 2) evitar repetir folga de uma semana para a outra;
+        # 3) equilibrar a quantidade histórica de folgas;
+        # 4) desempatar aleatoriamente.
+        # Entre as pessoas com folga obrigatória, é útil colocar
+        # no primeiro bloco quem NÃO poderia receber uma tarefa difícil.
+        # Assim deixamos trabalhando quem pode pegar Cozinha/Geladeira
+        # e depois receber folga no segundo bloco.
+        inaptos_para_dificil = sum(
+            pessoa in obrigatorias
+            and not pode_receber_tarefa_dificil(
+                historico,
+                pessoa,
             )
+            for pessoa in folgas
+        )
 
-            if not set(
-                folgas_obrigatorias
-            ).issubset(
-                pessoas_com_folga
-            ):
-                continue
-
-            score = 0
-
-            for pessoa in folga_inicio:
-                score += (
-                    quantidade_folgas(
-                        historico,
-                        pessoa,
-                    ) * 10
+        prioridade = (
+            -obrigatorias_escolhidas,
+            -inaptos_para_dificil,
+            sum(
+                teve_folga_na_ultima_semana(
+                    historico,
+                    pessoa,
                 )
-
-            for pessoa in folga_fim:
-                score += (
-                    quantidade_folgas(
-                        historico,
-                        pessoa,
-                    ) * 10
+                for pessoa in folgas
+            ),
+            sum(
+                quantidade_folgas(
+                    historico,
+                    pessoa,
                 )
+                for pessoa in folgas
+            ),
+            random.random(),
+        )
 
-            score += (
-                len(folga_inicio & folga_fim)
-                * 30
-            )
-
-            score += random.random()
-
-            possibilidades.append((
-                score,
-                folga_inicio,
-                folga_fim,
-            ))
+        possibilidades.append((
+            prioridade,
+            folgas,
+        ))
 
     if not possibilidades:
         raise ValueError(
-            "Não foi encontrada uma combinação válida de folgas."
+            "Não foi encontrada uma combinação válida de folgas "
+            "para DOM/SEG/TER."
         )
 
-    possibilidades.sort(key=lambda item: item[0])
+    possibilidades.sort(
+        key=lambda item: item[0]
+    )
 
-    _, folga_inicio, folga_fim = possibilidades[0]
+    return possibilidades[0][1]
 
-    return folga_inicio, folga_fim
+
+def escolher_folga_fim(
+    presentes,
+    folgas_obrigatorias,
+    folga_inicio,
+    escala_inicio,
+    historico,
+):
+    qtd_folgas_fim = (
+        len(presentes)
+        - len(TAREFAS_FIM)
+    )
+
+    obrigatorias_restantes = (
+        set(folgas_obrigatorias)
+        - set(folga_inicio)
+    )
+
+    if len(obrigatorias_restantes) > qtd_folgas_fim:
+        raise ValueError(
+            "Não há vagas de folga suficientes no segundo bloco "
+            "para cumprir as folgas obrigatórias restantes."
+        )
+
+    # Quem fez tarefa difícil no primeiro bloco deve ser a primeira
+    # opção para uma folga no segundo bloco. Isso evita situações
+    # como alguém fazer Cozinha e outra pessoa, com tarefa fácil,
+    # receber uma folga repetida sem necessidade.
+    fizeram_dificil_inicio = {
+        pessoa
+        for pessoa in presentes
+        if escala_inicio.get(pessoa) in TAREFAS_DIFICEIS
+    }
+
+    possibilidades = []
+
+    for combo in itertools.combinations(
+        presentes,
+        qtd_folgas_fim,
+    ):
+        folgas = set(combo)
+
+        if not obrigatorias_restantes.issubset(
+            folgas
+        ):
+            continue
+
+        qtd_dificeis_com_folga = len(
+            folgas & fizeram_dificil_inicio
+        )
+
+        qtd_repetem_folga_semana_anterior = sum(
+            teve_folga_na_ultima_semana(
+                historico,
+                pessoa,
+            )
+            for pessoa in folgas
+        )
+
+        qtd_folga_dupla = len(
+            folgas & set(folga_inicio)
+        )
+
+        historico_folgas = sum(
+            quantidade_folgas(
+                historico,
+                pessoa,
+            )
+            for pessoa in folgas
+        )
+
+        # Prioridades, nesta ordem:
+        # 1) dar folga a quem fez tarefa difícil no primeiro bloco;
+        # 2) evitar folga em semanas consecutivas;
+        # 3) evitar duas folgas na mesma semana;
+        # 4) equilibrar o total histórico de folgas;
+        # 5) desempatar aleatoriamente.
+        prioridade = (
+            -qtd_dificeis_com_folga,
+            qtd_folga_dupla,
+            qtd_repetem_folga_semana_anterior,
+            historico_folgas,
+            random.random(),
+        )
+
+        possibilidades.append((
+            prioridade,
+            folgas,
+        ))
+
+    if not possibilidades:
+        raise ValueError(
+            "Não foi encontrada uma combinação válida de folgas "
+            "para QUI/SEX/SÁB."
+        )
+
+    possibilidades.sort(
+        key=lambda item: item[0]
+    )
+
+    return possibilidades[0][1]
 
 
 # ============================================================
@@ -770,8 +900,13 @@ def distribuir_primeiro_bloco(
     folga_inicio,
     historico,
     data_semana,
+    folgas_obrigatorias=None,
 ):
     escala = {}
+
+    folgas_obrigatorias = set(
+        folgas_obrigatorias or []
+    )
 
     disponiveis = [
         pessoa
@@ -796,11 +931,111 @@ def distribuir_primeiro_bloco(
         disponiveis.remove("KOMIXÃO")
         tarefas.remove("Panos")
 
-    random.shuffle(tarefas)
+    # Distribui primeiro as tarefas difíceis. Se tarefas fáceis forem
+    # sorteadas antes, elas podem consumir todas as pessoas elegíveis
+    # e tornar impossível respeitar a regra de não fazer duas difíceis
+    # seguidas.
+    tarefas_dificeis = [
+        tarefa
+        for tarefa in tarefas
+        if tarefa in TAREFAS_DIFICEIS
+    ]
 
-    for tarefa in tarefas:
+    tarefas_normais = [
+        tarefa
+        for tarefa in tarefas
+        if tarefa not in TAREFAS_DIFICEIS
+    ]
+
+    random.shuffle(tarefas_dificeis)
+    random.shuffle(tarefas_normais)
+
+    tarefas_ordenadas = (
+        tarefas_dificeis
+        + tarefas_normais
+    )
+
+    # Quantas folgas, além das obrigatórias, inevitavelmente precisarão
+    # ser dadas a pessoas que já tiveram folga na semana anterior
+    # (considerando que evitamos folga dupla na mesma semana).
+    total_folgas_semana = (
+        len(presentes) - len(TAREFAS_INICIO)
+        + len(presentes) - len(TAREFAS_FIM)
+    )
+
+    folgas_extras_necessarias = max(
+        0,
+        total_folgas_semana - len(folgas_obrigatorias),
+    )
+
+    # Quando uma repetição de folga semanal for inevitável, tentamos
+    # fazer com que essa pessoa seja justamente alguém que fará uma
+    # tarefa difícil no primeiro bloco. Assim a folga repetida tem
+    # prioridade para quem fez Cozinha/Geladeira, em vez de cair em
+    # alguém com tarefa fácil como Panos.
+    dificeis_para_nao_obrigatorias = min(
+        folgas_extras_necessarias,
+        len(tarefas_dificeis),
+    )
+
+    for tarefa in tarefas_ordenadas:
+        candidatos = disponiveis.copy()
+
+        # Para tarefa difícil no primeiro bloco, prioriza quem ainda
+        # precisa obrigatoriamente de uma folga. Essa pessoa ficará
+        # candidata natural à folga no segundo bloco.
+        if tarefa in TAREFAS_DIFICEIS:
+            nao_obrigatorios_disponiveis = [
+                pessoa
+                for pessoa in candidatos
+                if pessoa not in folgas_obrigatorias
+                and pode_receber_tarefa_dificil(
+                    historico,
+                    pessoa,
+                )
+            ]
+
+            obrigatorios_disponiveis = [
+                pessoa
+                for pessoa in candidatos
+                if pessoa in folgas_obrigatorias
+                and pode_receber_tarefa_dificil(
+                    historico,
+                    pessoa,
+                )
+            ]
+
+            if (
+                dificeis_para_nao_obrigatorias > 0
+                and nao_obrigatorios_disponiveis
+            ):
+                # Como essa pessoa provavelmente será justamente a
+                # folga "extra" da semana, evitamos escolher quem já
+                # acumulou mais folgas no histórico.
+                menor_qtd_folgas = min(
+                    quantidade_folgas(
+                        historico,
+                        pessoa,
+                    )
+                    for pessoa in nao_obrigatorios_disponiveis
+                )
+
+                candidatos = [
+                    pessoa
+                    for pessoa in nao_obrigatorios_disponiveis
+                    if quantidade_folgas(
+                        historico,
+                        pessoa,
+                    ) == menor_qtd_folgas
+                ]
+
+                dificeis_para_nao_obrigatorias -= 1
+
+            elif obrigatorios_disponiveis:
+                candidatos = obrigatorios_disponiveis
+
         pessoa = escolher_pessoa(
-            disponiveis,
+            candidatos,
             tarefa,
             historico,
         )
@@ -970,7 +1205,11 @@ def gerar_semana(data_semana, ausentes):
         presentes,
     )
 
-    folga_inicio, folga_fim = escolher_folgas(
+    # Primeiro escolhe apenas as folgas de DOM/SEG/TER.
+    # Depois de saber quais tarefas cada pessoa recebeu nesse bloco,
+    # escolhemos as folgas de QUI/SEX/SÁB. Assim conseguimos dar
+    # prioridade real de folga a quem acabou de executar uma tarefa difícil.
+    folga_inicio = escolher_folga_inicio(
         presentes,
         folgas_obrigatorias,
         historico_anterior,
@@ -982,6 +1221,15 @@ def gerar_semana(data_semana, ausentes):
         folga_inicio,
         historico_anterior,
         data_semana,
+        folgas_obrigatorias,
+    )
+
+    folga_fim = escolher_folga_fim(
+        presentes,
+        folgas_obrigatorias,
+        folga_inicio,
+        escala1,
+        historico_anterior,
     )
 
     escala2 = distribuir_segundo_bloco(
