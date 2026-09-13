@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Escala de Limpeza</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="container">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">República • Escala semanal</p>
+        <h1>Escala de Limpeza</h1>
+        <p class="subtitle">Escolha a semana para consultar as tarefas.</p>
+      </div>
+    </section>
+
+    <section class="controls card">
+      <label for="semana">Semana</label>
+      <div class="control-row">
+        <select id="semana">
+          <option value="">Carregando semanas...</option>
+        </select>
+        <button id="mostrar">Ver escala</button>
+      </div>
+      <p id="status" class="status" aria-live="polite"></p>
+    </section>
+
+    <section id="resultado" class="card resultado" hidden>
+      <div class="table-title" id="tituloTabela">TABELA DE TAREFAS</div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="empty-head"></th>
+              <th>DOMINGO/SEG/TERÇA</th>
+              <th>QUARTA</th>
+              <th>QUINTA/SEXTA/SÁB</th>
+            </tr>
+          </thead>
+          <tbody id="corpoTabela"></tbody>
+        </table>
+      </div>
+
+      <div class="legend">
+        <span><i class="dot folga-dot"></i> Folga</span>
+        <span><i class="dot ausente-dot"></i> Ausente</span>
+      </div>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>

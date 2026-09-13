@@ -1,0 +1,43 @@
+{
+  "2026-09-06": {
+    "atualizada_em": "06/09/2026",
+    "pessoas": {
+      "JUKEBOX": {
+        "dom_seg_ter": "Área frontal da casa",
+        "qui_sex_sab": "Cozinha"
+      },
+      "LOTERYA": {
+        "dom_seg_ter": "Sala e copa",
+        "qui_sex_sab": "Armários cozinha"
+      },
+      "KOMIXÃO": {
+        "dom_seg_ter": "Cozinha",
+        "qui_sex_sab": "FOLGA"
+      },
+      "NAMOITA": {
+        "dom_seg_ter": "Geladeira",
+        "qui_sex_sab": "Área traseira da casa"
+      },
+      "NAZARÉ": {
+        "dom_seg_ter": "Lavanderia",
+        "qui_sex_sab": "FOLGA"
+      },
+      "CAMILA": {
+        "dom_seg_ter": "FOLGA",
+        "qui_sex_sab": "Garagem"
+      },
+      "BAQUETADA": {
+        "dom_seg_ter": "Panos",
+        "qui_sex_sab": "Sala e copa"
+      },
+      "AMANDA": {
+        "dom_seg_ter": "FOLGA",
+        "qui_sex_sab": "FOLGA"
+      },
+      "BELA": {
+        "dom_seg_ter": "FOLGA",
+        "qui_sex_sab": "FOLGA"
+      }
+    }
+  }
+}
