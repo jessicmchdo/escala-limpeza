@@ -121,5 +121,46 @@
         "qui_sex_sab": "Sala e copa"
       }
     }
+  },
+  "2026-09-27": {
+    "atualizada_em": "13/09/2026 13:32",
+    "pessoas": {
+      "JUKEBOX": {
+        "dom_seg_ter": "FOLGA",
+        "qui_sex_sab": "Área traseira da casa"
+      },
+      "LOTERYA": {
+        "dom_seg_ter": "Cozinha",
+        "qui_sex_sab": "FOLGA"
+      },
+      "KOMIXÃO": {
+        "dom_seg_ter": "Sala e copa",
+        "qui_sex_sab": "FOLGA"
+      },
+      "NAMOITA": {
+        "dom_seg_ter": "Panos",
+        "qui_sex_sab": "Sala e copa"
+      },
+      "NAZARÉ": {
+        "dom_seg_ter": "Geladeira",
+        "qui_sex_sab": "FOLGA"
+      },
+      "CAMILA": {
+        "dom_seg_ter": "FOLGA",
+        "qui_sex_sab": "Armários cozinha"
+      },
+      "BAQUETADA": {
+        "dom_seg_ter": "Área frontal da casa",
+        "qui_sex_sab": "FOLGA"
+      },
+      "AMANDA": {
+        "dom_seg_ter": "FOLGA",
+        "qui_sex_sab": "Garagem"
+      },
+      "BELA": {
+        "dom_seg_ter": "Lavanderia",
+        "qui_sex_sab": "Cozinha"
+      }
+    }
   }
 }
