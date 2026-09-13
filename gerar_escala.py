@@ -3,6 +3,7 @@ import os
 import itertools
 import json
 import subprocess
+import shutil
 import sys
 from datetime import datetime
 
@@ -47,6 +48,7 @@ TAREFAS_FIM = [
 TAREFAS_DIFICEIS = {
     "Cozinha",
     "Armários cozinha",
+    "Geladeira"
 }
 
 PROIBIDO_PANOS = {
@@ -95,6 +97,33 @@ def caminho_xlsx(data_semana):
 GIT_REMOTE = "origin"
 GIT_BRANCH = "main"
 FAZER_PUSH_AUTOMATICO = True
+
+
+def encontrar_git():
+
+    git = shutil.which("git")
+
+    if git:
+        return git
+
+    caminhos_possiveis = [
+        r"C:\Program Files\Git\cmd\git.exe",
+        r"C:\Program Files\Git\bin\git.exe",
+        r"C:\Program Files (x86)\Git\cmd\git.exe",
+        r"C:\Program Files (x86)\Git\bin\git.exe",
+    ]
+
+    for caminho in caminhos_possiveis:
+
+        if os.path.exists(caminho):
+            return caminho
+
+    raise FileNotFoundError(
+        "O Git não foi encontrado no computador."
+    )
+
+
+GIT_EXECUTAVEL = encontrar_git()
 
 
 # ============================================================
@@ -418,7 +447,77 @@ def tarefa_permitida(pessoa, tarefa):
     return True
 
 
-def escolher_pessoa(candidatos, tarefa, historico):
+def ultima_tarefa_executada(historico, pessoa):
+    dados = historico[
+        historico["pessoa"] == pessoa
+    ].copy()
+
+    if dados.empty:
+        return None
+
+    dados["_data"] = pd.to_datetime(
+        dados["semana"],
+        format="%d/%m/%Y",
+        errors="coerce",
+    )
+
+    dados = dados.sort_values(
+        "_data",
+        ascending=False,
+    )
+
+    for _, linha in dados.iterrows():
+        for coluna in [
+            "qui_sex_sab",
+            "dom_seg_ter",
+        ]:
+            tarefa = linha[coluna]
+
+            if tarefa not in [
+                "",
+                "FOLGA",
+                "AUSENTE",
+            ]:
+                return tarefa
+
+    return None
+
+
+def pode_receber_tarefa_dificil(
+    historico,
+    pessoa,
+    escala_anterior=None,
+):
+    # Se existe um bloco anterior na semana atual e a pessoa
+    # trabalhou nele, essa é a tarefa imediatamente anterior.
+    if escala_anterior is not None:
+        tarefa_anterior = escala_anterior.get(pessoa)
+
+        if tarefa_anterior not in [
+            None,
+            "",
+            "FOLGA",
+            "AUSENTE",
+        ]:
+            return tarefa_anterior not in TAREFAS_DIFICEIS
+
+    # Se a pessoa folgou no bloco anterior, ou estamos distribuindo
+    # o primeiro bloco da semana, busca a última tarefa realmente
+    # executada no histórico.
+    tarefa_anterior = ultima_tarefa_executada(
+        historico,
+        pessoa,
+    )
+
+    return tarefa_anterior not in TAREFAS_DIFICEIS
+
+
+def escolher_pessoa(
+    candidatos,
+    tarefa,
+    historico,
+    escala_anterior=None,
+):
     candidatos = [
         pessoa
         for pessoa in candidatos
@@ -432,6 +531,27 @@ def escolher_pessoa(candidatos, tarefa, historico):
         raise ValueError(
             f"Não há pessoa disponível para a tarefa '{tarefa}'."
         )
+
+    # REGRA OBRIGATÓRIA:
+    # quem fez uma tarefa difícil imediatamente antes
+    # não pode receber outra tarefa difícil em seguida.
+    if tarefa in TAREFAS_DIFICEIS:
+        candidatos = [
+            pessoa
+            for pessoa in candidatos
+            if pode_receber_tarefa_dificil(
+                historico,
+                pessoa,
+                escala_anterior,
+            )
+        ]
+
+        if not candidatos:
+            raise ValueError(
+                "Não foi possível distribuir a tarefa difícil "
+                f"'{tarefa}' sem colocar duas tarefas difíceis "
+                "seguidas para a mesma pessoa."
+            )
 
     candidatos_originais = candidatos.copy()
 
@@ -716,14 +836,33 @@ def distribuir_segundo_bloco(
     random.shuffle(tarefas_dificeis)
 
     for tarefa in tarefas_dificeis:
-        candidatos = [
+        # Primeiro elimina quem teria duas tarefas difíceis seguidas.
+        candidatos_validos = [
             pessoa
             for pessoa in disponiveis
+            if pode_receber_tarefa_dificil(
+                historico,
+                pessoa,
+                escala_inicio,
+            )
+        ]
+
+        if not candidatos_validos:
+            raise ValueError(
+                "Não foi possível distribuir as tarefas difíceis "
+                "sem repetir tarefa difícil em sequência."
+            )
+
+        # Entre os válidos, mantém a prioridade para quem folgou
+        # no primeiro bloco.
+        candidatos = [
+            pessoa
+            for pessoa in candidatos_validos
             if escala_inicio[pessoa] == "FOLGA"
         ]
 
         if not candidatos:
-            candidatos = disponiveis.copy()
+            candidatos = candidatos_validos.copy()
 
         sem_repeticao_mesma_semana = [
             pessoa
@@ -738,6 +877,7 @@ def distribuir_segundo_bloco(
             candidatos,
             tarefa,
             historico,
+            escala_inicio,
         )
 
         escala[pessoa] = tarefa
@@ -1157,14 +1297,16 @@ def salvar_xlsx(
 # ============================================================
 
 def executar_git(*args):
+
     resultado = subprocess.run(
-        ["git", *args],
+        [GIT_EXECUTAVEL, *args],
         cwd=PASTA_SCRIPT,
         text=True,
-        capture_output=True,
+        capture_output=True
     )
 
     if resultado.returncode != 0:
+
         raise RuntimeError(
             resultado.stderr.strip()
             or resultado.stdout.strip()
@@ -1172,6 +1314,28 @@ def executar_git(*args):
         )
 
     return resultado.stdout.strip()
+
+
+def sincronizar_github():
+    # Atualiza a pasta local antes de gerar uma nova escala.
+    # --autostash permite o rebase mesmo se houver alterações locais
+    # em arquivos já rastreados pelo Git.
+    executar_git(
+        "rev-parse",
+        "--is-inside-work-tree",
+    )
+
+    print("Sincronizando com o GitHub...")
+
+    executar_git(
+        "pull",
+        "--rebase",
+        "--autostash",
+        GIT_REMOTE,
+        GIT_BRANCH,
+    )
+
+    print("Git pull --rebase concluído.")
 
 
 def publicar_github(data_semana):
@@ -1185,6 +1349,7 @@ def publicar_github(data_semana):
         "index.html",
         "style.css",
         "script.js",
+        os.path.basename(__file__),
     ]
 
     xlsx_relativo = os.path.basename(
@@ -1196,7 +1361,12 @@ def publicar_github(data_semana):
 
     # Verifica se existe alteração staged
     diff = subprocess.run(
-        ["git", "diff", "--cached", "--quiet"],
+        [
+            GIT_EXECUTAVEL,
+            "diff",
+            "--cached",
+            "--quiet"
+        ],
         cwd=PASTA_SCRIPT,
     )
 
@@ -1334,6 +1504,12 @@ def main():
         )
 
     ausentes = ler_ausentes()
+
+    # Antes de ler o histórico e gerar a nova escala,
+    # traz para a máquina qualquer alteração que esteja no GitHub.
+    if FAZER_PUSH_AUTOMATICO:
+        print()
+        sincronizar_github()
 
     (
         escala1,
