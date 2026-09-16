@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Multas</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="supabase-pages.css">
+</head>
+<body>
+<main class="container">
+  <nav class="app-nav">
+    <a href="index.html">Escala</a>
+    <a href="confirmar.html">Minhas faxinas</a>
+    <a class="active" href="multas.html">Multas</a>
+  </nav>
+
+  <section class="hero">
+    <div>
+      <p class="eyebrow">República • Controle</p>
+      <h1>Multas</h1>
+      <p class="subtitle">Consulte as multas de faxina.</p>
+    </div>
+  </section>
+
+  <section id="loginCard" class="card auth-card">
+    <h2>Entrar</h2>
+    <label for="email">E-mail</label>
+    <input id="email" type="email" autocomplete="email">
+    <label for="senha">Senha</label>
+    <input id="senha" type="password" autocomplete="current-password">
+    <button id="entrar">Entrar</button>
+    <p id="loginStatus" class="status" aria-live="polite"></p>
+  </section>
+
+  <section id="appCard" class="card" hidden>
+    <div class="top-row">
+      <div>
+        <h2 id="titulo">Minhas multas</h2>
+        <p id="perfilInfo" class="muted"></p>
+      </div>
+      <button id="sair" class="secondary">Sair</button>
+    </div>
+    <div id="listaMultas"></div>
+    <p id="appStatus" class="status" aria-live="polite"></p>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-config.js"></script>
+<script src="multas.js"></script>
+</body>
+</html>
