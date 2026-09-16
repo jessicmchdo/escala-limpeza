@@ -5,23 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Escala de Limpeza</title>
   <link rel="stylesheet" href="style.css" />
-  <link rel="stylesheet" href="supabase-pages.css" />
+  <link rel="stylesheet" href="supabase/supabase-pages.css" />
 </head>
 <body>
   <main class="container">
-    <nav class="app-nav main-nav" aria-label="Navegação principal">
-      <a class="active" href="index.html">
-        <span class="nav-icon">▦</span>
-        <span>Escala</span>
-      </a>
-      <a href="supabase/confirmar.html">
-        <span class="nav-icon">✓</span>
-        <span>Minhas faxinas</span>
-      </a>
-      <a href="supabase/multas.html">
-        <span class="nav-icon">R$</span>
-        <span>Multas</span>
-      </a>
+    <nav class="app-nav main-nav">
+      <a class="active" href="index.html"><span class="nav-icon">▦</span><span>Escala</span></a>
+      <a href="supabase/confirmar.html"><span class="nav-icon">✓</span><span>Minhas faxinas</span></a>
+      <a href="supabase/multas.html"><span class="nav-icon">R$</span><span>Multas</span></a>
     </nav>
 
     <section class="hero">
@@ -35,9 +26,7 @@
     <section class="controls card">
       <label for="semana">Semana</label>
       <div class="control-row">
-        <select id="semana">
-          <option value="">Carregando semanas...</option>
-        </select>
+        <select id="semana"><option value="">Carregando semanas...</option></select>
         <button id="mostrar">Ver escala</button>
       </div>
       <p id="status" class="status" aria-live="polite"></p>
@@ -47,14 +36,7 @@
       <div class="table-title" id="tituloTabela">TABELA DE TAREFAS</div>
       <div class="table-wrap">
         <table>
-          <thead>
-            <tr>
-              <th class="empty-head"></th>
-              <th>DOMINGO/SEG/TERÇA</th>
-              <th>QUARTA</th>
-              <th>QUINTA/SEXTA/SÁB</th>
-            </tr>
-          </thead>
+          <thead><tr><th class="empty-head"></th><th>DOMINGO/SEG/TERÇA</th><th>QUARTA</th><th>QUINTA/SEXTA/SÁB</th></tr></thead>
           <tbody id="corpoTabela"></tbody>
         </table>
       </div>
@@ -64,7 +46,6 @@
       </div>
     </section>
   </main>
-
   <script src="script.js"></script>
 </body>
 </html>
