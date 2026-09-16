@@ -4,24 +4,21 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Minhas Faxinas</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="../style.css">
   <link rel="stylesheet" href="supabase-pages.css">
 </head>
 <body>
 <main class="container">
-  <nav class="app-nav">
-    <a href="index.html">Escala</a>
-    <a class="active" href="confirmar.html">Minhas faxinas</a>
-    <a href="multas.html">Multas</a>
+  <nav class="app-nav main-nav">
+    <a href="../index.html"><span class="nav-icon">▦</span><span>Escala</span></a>
+    <a class="active" href="confirmar.html"><span class="nav-icon">✓</span><span>Minhas faxinas</span></a>
+    <a href="multas.html"><span class="nav-icon">R$</span><span>Multas</span></a>
   </nav>
-
-  <section class="hero">
-    <div>
-      <p class="eyebrow">República • Confirmação</p>
-      <h1>Minhas faxinas</h1>
-      <p class="subtitle">Escolha seu nome para consultar suas tarefas.</p>
-    </div>
-  </section>
+  <section class="hero"><div>
+    <p class="eyebrow">República • Confirmação</p>
+    <h1>Minhas faxinas</h1>
+    <p class="subtitle">Escolha seu nome para consultar e confirmar suas tarefas.</p>
+  </div></section>
 
   <section id="loginCard" class="card auth-card">
     <label for="pessoa">Quem é você?</label>
@@ -40,8 +37,7 @@
       <div><h2 id="saudacao"></h2><p class="muted">A confirmação é definitiva.</p></div>
       <button id="sair" class="secondary">Trocar pessoa</button>
     </div>
-    <div id="tarefas"></div>
-    <p id="appStatus" class="status"></p>
+    <div id="tarefas"></div><p id="appStatus" class="status"></p>
   </section>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
