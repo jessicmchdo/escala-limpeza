@@ -1,0 +1,16 @@
+LOGIN SOMENTE POR NOME
+
+Substitua no repositório:
+- confirmar.html
+- confirmar.js
+- multas.html
+- multas.js
+
+Mantenha:
+- supabase-config.js
+- supabase-pages.css
+
+Depois execute o arquivo ajuste_supabase_login_nome.sql no SQL Editor do Supabase.
+
+O sistema começa em 20/09/2026 e não cria confirmações/multas retroativas.
+A tabela atribuicoes ainda precisa ser sincronizada com as novas escalas.
