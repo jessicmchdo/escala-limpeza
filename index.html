@@ -5,14 +5,30 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Escala de Limpeza</title>
   <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="supabase-pages.css" />
 </head>
 <body>
   <main class="container">
+    <nav class="app-nav main-nav" aria-label="Navegação principal">
+      <a class="active" href="index.html">
+        <span class="nav-icon">▦</span>
+        <span>Escala</span>
+      </a>
+      <a href="confirmar.html">
+        <span class="nav-icon">✓</span>
+        <span>Minhas faxinas</span>
+      </a>
+      <a href="multas.html">
+        <span class="nav-icon">R$</span>
+        <span>Multas</span>
+      </a>
+    </nav>
+
     <section class="hero">
       <div>
         <p class="eyebrow">República • Escala semanal</p>
         <h1>Escala de Limpeza</h1>
-        <p class="subtitle">Escolha a semana para consultar as tarefas.</p>
+        <p class="subtitle">Consulte a escala da semana, confirme suas faxinas e acompanhe as multas.</p>
       </div>
     </section>
 
@@ -29,7 +45,6 @@
 
     <section id="resultado" class="card resultado" hidden>
       <div class="table-title" id="tituloTabela">TABELA DE TAREFAS</div>
-
       <div class="table-wrap">
         <table>
           <thead>
@@ -43,7 +58,6 @@
           <tbody id="corpoTabela"></tbody>
         </table>
       </div>
-
       <div class="legend">
         <span><i class="dot folga-dot"></i> Folga</span>
         <span><i class="dot ausente-dot"></i> Ausente</span>
