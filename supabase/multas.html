@@ -3,11 +3,16 @@
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Multas</title>
-  <link rel="stylesheet" href="style.css"><link rel="stylesheet" href="supabase-pages.css">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="supabase-pages.css">
 </head>
 <body>
 <main class="container">
-  <nav class="app-nav"><a href="index.html">Escala</a><a href="confirmar.html">Minhas faxinas</a><a class="active" href="multas.html">Multas</a></nav>
+  <nav class="app-nav main-nav">
+    <a href="../index.html"><span class="nav-icon">▦</span><span>Escala</span></a>
+    <a href="confirmar.html"><span class="nav-icon">✓</span><span>Minhas faxinas</span></a>
+    <a class="active" href="multas.html"><span class="nav-icon">R$</span><span>Multas</span></a>
+  </nav>
   <section class="hero"><div><p class="eyebrow">República • Controle</p><h1>Multas</h1><p class="subtitle">Consulte as multas de faxina.</p></div></section>
   <section class="card">
     <label for="pessoa">Moradora</label>
@@ -16,5 +21,7 @@
     <div id="listaMultas"></div><p id="status" class="status"></p>
   </section>
 </main>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="supabase-config.js"></script><script src="multas.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-config.js"></script>
+<script src="multas.js"></script>
 </body></html>
