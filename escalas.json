@@ -64,20 +64,20 @@
         "qui_sex_sab": "Cozinha"
       },
       "CAMILA": {
-        "dom_seg_ter": "Cozinha",
+        "dom_seg_ter": "Lavanderia",
         "qui_sex_sab": "FOLGA"
       },
       "BAQUETADA": {
         "dom_seg_ter": "Geladeira",
-        "qui_sex_sab": "FOLGA"
+        "qui_sex_sab": "Armários cozinha"
       },
       "AMANDA": {
         "dom_seg_ter": "AUSENTE",
         "qui_sex_sab": "AUSENTE"
       },
       "BELA": {
-        "dom_seg_ter": "Lavanderia",
-        "qui_sex_sab": "Armários cozinha"
+        "dom_seg_ter": "Cozinha",
+        "qui_sex_sab": "FOLGA"
       }
     }
   }
