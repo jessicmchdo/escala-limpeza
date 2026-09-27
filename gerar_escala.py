@@ -716,6 +716,21 @@ def escolher_folga_inicio(
     ):
         folgas = set(combo)
 
+        # REGRA OBRIGATÓRIA: quem terminou a última semana fazendo
+        # uma tarefa difícil no segundo bloco precisa folgar agora,
+        # no primeiro bloco desta semana.
+        folga_imediata_apos_dificil = {
+            pessoa
+            for pessoa in presentes
+            if (
+                (ultima := ultima_semana_participada(historico, pessoa)) is not None
+                and ultima["qui_sex_sab"] in TAREFAS_DIFICEIS
+            )
+        }
+
+        if not folga_imediata_apos_dificil.issubset(folgas):
+            continue
+
         # 13/09: Komixão precisa fazer Panos no primeiro bloco.
         if (
             data_semana == datetime(2026, 9, 13)
@@ -806,21 +821,26 @@ def escolher_folga_fim(
         - set(folga_inicio)
     )
 
-    if len(obrigatorias_restantes) > qtd_folgas_fim:
-        raise ValueError(
-            "Não há vagas de folga suficientes no segundo bloco "
-            "para cumprir as folgas obrigatórias restantes."
-        )
-
-    # Quem fez tarefa difícil no primeiro bloco deve ser a primeira
-    # opção para uma folga no segundo bloco. Isso evita situações
-    # como alguém fazer Cozinha e outra pessoa, com tarefa fácil,
-    # receber uma folga repetida sem necessidade.
+    # REGRA OBRIGATÓRIA:
+    # quem executou uma tarefa difícil no primeiro bloco deve folgar
+    # no segundo bloco. Não é apenas uma prioridade de desempate.
     fizeram_dificil_inicio = {
         pessoa
         for pessoa in presentes
         if escala_inicio.get(pessoa) in TAREFAS_DIFICEIS
     }
+
+    folgas_obrigatorias_fim = (
+        obrigatorias_restantes
+        | fizeram_dificil_inicio
+    )
+
+    if len(folgas_obrigatorias_fim) > qtd_folgas_fim:
+        raise ValueError(
+            "Não há vagas de folga suficientes no segundo bloco para "
+            "cumprir simultaneamente as folgas obrigatórias do histórico "
+            "e a folga obrigatória de quem fez tarefa difícil no primeiro bloco."
+        )
 
     possibilidades = []
 
@@ -830,7 +850,10 @@ def escolher_folga_fim(
     ):
         folgas = set(combo)
 
-        if not obrigatorias_restantes.issubset(
+        # A combinação só é válida se incluir TODAS as pessoas que
+        # precisam obrigatoriamente folgar no segundo bloco, inclusive
+        # quem acabou de executar Cozinha, Geladeira ou outra tarefa difícil.
+        if not folgas_obrigatorias_fim.issubset(
             folgas
         ):
             continue
