@@ -1,16 +1,2 @@
-LOGIN SOMENTE POR NOME
-
-Substitua no repositório:
-- confirmar.html
-- confirmar.js
-- multas.html
-- multas.js
-
-Mantenha:
-- supabase-config.js
-- supabase-pages.css
-
-Depois execute o arquivo ajuste_supabase_login_nome.sql no SQL Editor do Supabase.
-
-O sistema começa em 20/09/2026 e não cria confirmações/multas retroativas.
-A tabela atribuicoes ainda precisa ser sincronizada com as novas escalas.
+Siga o arquivo LEIA-ME-ATIVACAO.md da pasta principal.
+Crie primeiro a conta NAMOITA no painel Supabase, execute supabase_setup.sql e depois supabase/agendar_multas.sql.

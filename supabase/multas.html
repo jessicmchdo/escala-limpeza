@@ -1,27 +1,10 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Multas</title>
-  <link rel="stylesheet" href="../style.css">
-  <link rel="stylesheet" href="supabase-pages.css">
-</head>
-<body>
-<main class="container">
-  <nav class="app-nav main-nav">
-    <a href="../index.html"><span class="nav-icon">▦</span><span>Escala</span></a>
-    <a href="confirmar.html"><span class="nav-icon">✓</span><span>Minhas faxinas</span></a>
-    <a class="active" href="multas.html"><span class="nav-icon">R$</span><span>Multas</span></a>
-  </nav>
-  <section class="hero"><div><p class="eyebrow">República • Controle</p><h1>Multas</h1><p class="subtitle">Consulte as multas de faxina.</p></div></section>
-  <section class="card">
-    <label for="pessoa">Moradora</label>
-    <select id="pessoa"><option value="">Todas</option><option>JUKEBOX</option><option>LOTERYA</option><option>KOMIXÃO</option><option>NAMOITA</option><option>NAZARÉ</option><option>CAMILA</option><option>BAQUETADA</option><option>AMANDA</option><option>BELA</option></select>
-    <button id="consultar">Consultar</button>
-    <div id="listaMultas"></div><p id="status" class="status"></p>
-  </section>
-</main>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="supabase-config.js"></script>
-<script src="multas.js"></script>
-</body></html>
+<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Multas</title><link rel="stylesheet" href="../style.css"><link rel="stylesheet" href="supabase-pages.css"></head><body><main class="container"><nav class="app-nav main-nav" aria-label="Navegação principal"><a href="../index.html">▦ Escala</a><a href="confirmar.html" >✓ Minhas faxinas</a><a href="multas.html" class="active" aria-current="page">R$ Multas</a></nav><section class="hero"><p class="eyebrow">República • Limpeza</p><h1>Multas</h1><p class="subtitle">Veja suas multas por mês e a data de vencimento de cada tarefa.</p></section><section id="loginCard" class="card auth-card"><h2>Acesse sua conta</h2>
+<form id="loginForm"><label for="pessoa">Nome de usuário</label><select id="pessoa" autocomplete="username" required><option value="">Selecione seu nome</option><option>JUKEBOX</option><option>LOTERYA</option><option>KOMIXÃO</option><option>NAMOITA</option><option>NAZARÉ</option><option>CAMILA</option><option>BAQUETADA</option><option>AMANDA</option><option>BELA</option></select>
+<label for="senha">Senha</label><input id="senha" type="password" autocomplete="current-password" required minlength="8">
+<button id="entrar" type="submit">Entrar</button></form>
+<details id="cadastro"><summary>Primeiro acesso: cadastrar senha</summary><p class="muted">Peça a NAMOITA seu código de liberação. Escolha seu nome acima e cadastre uma senha abaixo.</p>
+<form id="signupForm"><label for="codigo">Código de liberação</label><input id="codigo" autocomplete="off" required>
+<label for="novaSenha">Sua nova senha</label><input id="novaSenha" type="password" autocomplete="new-password" minlength="8" required>
+<label for="confirmarSenha">Repita a senha</label><input id="confirmarSenha" type="password" autocomplete="new-password" minlength="8" required>
+<button id="cadastrar" type="submit">Cadastrar minha senha</button></form></details>
+<p id="loginStatus" class="status" role="status" aria-live="polite"></p><button id="retry" class="secondary" type="button" hidden>Tentar conexão novamente</button></section><section id="appCard" class="card" hidden><div class="top-row"><div><h2 id="saudacao"></h2><p class="muted">R$ 30 por tarefa não concluída. Cobrança desde a semana de 27/09/2026.</p></div><button id="sair" class="secondary">Sair</button></div><div class="filters"><div id="adminFiltro" hidden><label for="filtroPessoa">Pessoa</label><select id="filtroPessoa"><option value="">Todas</option><option>JUKEBOX</option><option>LOTERYA</option><option>KOMIXÃO</option><option>NAMOITA</option><option>NAZARÉ</option><option>CAMILA</option><option>BAQUETADA</option><option>AMANDA</option><option>BELA</option></select></div><div><label for="mes">Mês do vencimento</label><select id="mes"><option value="">Todos os meses</option></select></div></div><div id="resumoMultas" class="summary-grid"></div><div id="listaMultas"></div><p id="appStatus" class="status" role="status" aria-live="polite"></p><button id="atualizar" type="button" class="secondary">Atualizar registros</button></section></main><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.js"></script><script src="../config.js"></script><script src="common.js"></script><script src="multas.js"></script></body></html>

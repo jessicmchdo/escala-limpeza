@@ -17,3 +17,12 @@
 .nav-icon{width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border-radius:10px;background:rgba(11,90,147,.09);color:#0b5a93;font-size:15px;font-weight:800}
 .app-nav.main-nav a.active .nav-icon{background:rgba(255,255,255,.18);color:#fff}
 @media(max-width:650px){.app-nav.main-nav{grid-template-columns:1fr;gap:8px}.app-nav.main-nav a{min-height:56px;justify-content:flex-start}}
+[hidden]{display:none!important}
+.auth-card h2{margin-top:0}.auth-card summary{cursor:pointer;font-weight:700;margin:1.2rem 0}.auth-card label{display:block;font-weight:600}
+button:disabled{opacity:.55;cursor:not-allowed}button.secondary{color:#1f3550;background:#e9eef3}button.secondary:hover{background:#dce5ed}
+.actions,.filters{display:flex;flex-wrap:wrap;gap:12px;margin-top:16px}.filters>div{flex:1;min-width:180px}.filters label{display:block;margin-bottom:8px}.filters select,#filtroPessoa{width:100%}
+.task-card.concluida{border-left:5px solid #24845d}.task-card.nao_concluida,.fine-card{border-left:5px solid #b33140}.badge.concluida{background:#e2f4e9;color:#135d3e}.badge.nao_concluida{background:#ffe6e8;color:#942436}.badge.pendente{background:#fff4d4;color:#78580b}.fine-value{color:#942436;font-weight:700}
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-top:20px}.month-card{background:#eef5fc;border:1px solid #d3e2f2;border-radius:12px;padding:18px}.month-card h3{margin-top:0;text-transform:capitalize}.month-card strong{font-size:1.4rem;color:#084b7b}
+.access-row{display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid #e6ebf0;padding:14px 0}.access-row p{margin-bottom:0}#codigoGerado{display:block;padding:16px;background:#eef5fc;border-radius:10px;overflow-wrap:anywhere;font-family:monospace;margin-bottom:10px}
+:focus-visible{outline:3px solid #2d7dba;outline-offset:3px}.status{overflow-wrap:anywhere}
+@media(max-width:650px){.top-row,.access-row{flex-direction:column}.actions{flex-direction:column}.auth-card{max-width:none}.filters{flex-direction:column}}
