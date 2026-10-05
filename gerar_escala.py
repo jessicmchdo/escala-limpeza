@@ -84,15 +84,6 @@ def caminho_xlsx(data_semana):
 # ============================================================
 # CONFIGURAÇÃO DO GIT
 # ============================================================
-#
-# O script pressupõe que:
-# 1. esta pasta já é um repositório Git;
-# 2. existe um remote chamado "origin";
-# 3. você já consegue executar "git push" normalmente
-#    no terminal, via Git Credential Manager ou SSH.
-#
-# NÃO coloque token/senha dentro deste arquivo.
-# ============================================================
 
 GIT_REMOTE = "origin"
 GIT_BRANCH = "main"
@@ -124,51 +115,6 @@ def encontrar_git():
 
 
 GIT_EXECUTAVEL = encontrar_git()
-
-
-# ============================================================
-# SEMANA FIXA 06/09/2026
-# ============================================================
-
-ESCALA_FIXA_06_09 = {
-    "JUKEBOX": {
-        "DOM/SEG/TER": "Área frontal da casa",
-        "QUI/SEX/SÁB": "Cozinha",
-    },
-    "LOTERYA": {
-        "DOM/SEG/TER": "Sala e copa",
-        "QUI/SEX/SÁB": "Armários cozinha",
-    },
-    "KOMIXÃO": {
-        "DOM/SEG/TER": "Cozinha",
-        "QUI/SEX/SÁB": "FOLGA",
-    },
-    "NAMOITA": {
-        "DOM/SEG/TER": "Geladeira",
-        "QUI/SEX/SÁB": "Área traseira da casa",
-    },
-    "NAZARÉ": {
-        "DOM/SEG/TER": "Lavanderia",
-        "QUI/SEX/SÁB": "FOLGA",
-    },
-    "CAMILA": {
-        "DOM/SEG/TER": "FOLGA",
-        "QUI/SEX/SÁB": "Garagem",
-    },
-    "BAQUETADA": {
-        "DOM/SEG/TER": "Panos",
-        "QUI/SEX/SÁB": "Sala e copa",
-    },
-    "AMANDA": {
-        "DOM/SEG/TER": "FOLGA",
-        "QUI/SEX/SÁB": "FOLGA",
-    },
-    "BELA": {
-        "DOM/SEG/TER": "FOLGA",
-        "QUI/SEX/SÁB": "FOLGA",
-    },
-}
-
 
 # ============================================================
 # HISTÓRICO
@@ -731,13 +677,6 @@ def escolher_folga_inicio(
         if not folga_imediata_apos_dificil.issubset(folgas):
             continue
 
-        # 13/09: Komixão precisa fazer Panos no primeiro bloco.
-        if (
-            data_semana == datetime(2026, 9, 13)
-            and "KOMIXÃO" in folgas
-        ):
-            continue
-
         obrigatorias_escolhidas = len(
             folgas & obrigatorias
         )
@@ -942,18 +881,6 @@ def distribuir_primeiro_bloco(
 
     tarefas = TAREFAS_INICIO.copy()
 
-    # Regra especial 13/09/2026
-    if data_semana == datetime(2026, 9, 13):
-        if "KOMIXÃO" not in presentes:
-            raise ValueError(
-                "KOMIXÃO está ausente em 13/09/2026, "
-                "mas precisa executar Panos."
-            )
-
-        escala["KOMIXÃO"] = "Panos"
-        disponiveis.remove("KOMIXÃO")
-        tarefas.remove("Panos")
-
     # Distribui primeiro as tarefas difíceis. Se tarefas fáceis forem
     # sorteadas antes, elas podem consumir todas as pessoas elegíveis
     # e tornar impossível respeitar a regra de não fazer duas difíceis
@@ -991,11 +918,6 @@ def distribuir_primeiro_bloco(
         total_folgas_semana - len(folgas_obrigatorias),
     )
 
-    # Quando uma repetição de folga semanal for inevitável, tentamos
-    # fazer com que essa pessoa seja justamente alguém que fará uma
-    # tarefa difícil no primeiro bloco. Assim a folga repetida tem
-    # prioridade para quem fez Cozinha/Geladeira, em vez de cair em
-    # alguém com tarefa fácil como Panos.
     dificeis_para_nao_obrigatorias = min(
         folgas_extras_necessarias,
         len(tarefas_dificeis),
