@@ -1,77 +1,75 @@
-import random
+# -*- coding: utf-8 -*-
+"""Gerador de escala com ausências por bloco e redução automática de tarefas.
+
+Tenta a escala completa; se nenhuma combinação respeitar as regras,
+mantém Cozinha e Sala e copa nos dois blocos, Panos só no primeiro
+e o máximo possível de tarefas opcionais.
+Os arquivos do site e os horários de confirmação continuam compatíveis.
+"""
 import os
-import itertools
 import json
+import random
+import itertools
 import subprocess
 import shutil
 import sys
+import unicodedata
+from collections import Counter
 from datetime import datetime
 
 import pandas as pd
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 
-
-# ============================================================
-# CONFIGURAÇÕES
-# ============================================================
-
-PESSOAS = [
-    "JUKEBOX",
-    "LOTERYA",
-    "KOMIXÃO",
-    "NAMOITA",
-    "NAZARÉ",
-    "CAMILA",
-    "BAQUETADA",
-    "AMANDA",
-    "BELA",
-]
-
-TAREFAS_INICIO = [
-    "Área frontal da casa",
-    "Sala e copa",
-    "Cozinha",
-    "Geladeira",
-    "Lavanderia",
-    "Panos",
-]
-
-TAREFAS_FIM = [
-    "Cozinha",
-    "Armários cozinha",
-    "Área traseira da casa",
-    "Garagem",
-    "Sala e copa",
-]
-
-TAREFAS_DIFICEIS = {
-    "Cozinha",
-    "Armários cozinha",
-    "Geladeira"
-}
-
-PROIBIDO_PANOS = {
-    "NAZARÉ",
-    "CAMILA",
-}
-
-
-# ============================================================
-# ARQUIVOS
-# ============================================================
-
+PESSOAS = ["JUKEBOX", "LOTERYA", "KOMIXÃO", "NAMOITA", "NAZARÉ", "CAMILA", "BAQUETADA", "AMANDA", "BELA"]
+TAREFAS_INICIO = ["Área frontal da casa", "Sala e copa", "Cozinha", "Geladeira", "Lavanderia", "Panos"]
+TAREFAS_FIM = ["Cozinha", "Armários cozinha", "Área traseira da casa", "Garagem", "Sala e copa"]
+TAREFAS_OBRIGATORIAS = (("Cozinha", "Sala e copa", "Panos"), ("Cozinha", "Sala e copa"))
+TAREFAS_DIFICEIS = {"Cozinha", "Armários cozinha", "Geladeira"}
+PROIBIDO_PANOS = {"NAZARÉ", "CAMILA"}
+BLOCOS = ("dom_seg_ter", "qui_sex_sab")
+ROTULOS_BLOCOS = ("DOM/SEG/TER", "QUI/SEX/SÁB")
+SEM_TAREFA = {"", "FOLGA", "AUSENTE"}
 PASTA_SCRIPT = os.path.dirname(os.path.abspath(__file__))
+ARQUIVO_HISTORICO = os.path.join(PASTA_SCRIPT, "historico_limpeza.csv")
+ARQUIVO_JSON = os.path.join(PASTA_SCRIPT, "escalas.json")
+GIT_REMOTE = "origin"
+GIT_BRANCH = "main"
+FAZER_PUSH_AUTOMATICO = True
+ULTIMA_GERACAO = {}
 
-ARQUIVO_HISTORICO = os.path.join(
-    PASTA_SCRIPT,
-    "historico_limpeza.csv",
-)
+# Base histórica usada APENAS se faltar uma pessoa em 06/09 no CSV e no JSON.
+# Registros já existentes no CSV nunca são substituídos por esta base.
+ESCALA_FIXA_06_09 = {
+ "JUKEBOX": {"DOM/SEG/TER": "Área frontal da casa", "QUI/SEX/SÁB": "Cozinha"},
+ "LOTERYA": {"DOM/SEG/TER": "Sala e copa", "QUI/SEX/SÁB": "Armários cozinha"},
+ "KOMIXÃO": {"DOM/SEG/TER": "Cozinha", "QUI/SEX/SÁB": "FOLGA"},
+ "NAMOITA": {"DOM/SEG/TER": "Geladeira", "QUI/SEX/SÁB": "Área traseira da casa"},
+ "NAZARÉ": {"DOM/SEG/TER": "Lavanderia", "QUI/SEX/SÁB": "FOLGA"},
+ "CAMILA": {"DOM/SEG/TER": "FOLGA", "QUI/SEX/SÁB": "Garagem"},
+ "BAQUETADA": {"DOM/SEG/TER": "Panos", "QUI/SEX/SÁB": "Sala e copa"},
+ "AMANDA": {"DOM/SEG/TER": "FOLGA", "QUI/SEX/SÁB": "FOLGA"},
+ "BELA": {"DOM/SEG/TER": "FOLGA", "QUI/SEX/SÁB": "FOLGA"},
+}
 
-ARQUIVO_JSON = os.path.join(
-    PASTA_SCRIPT,
-    "escalas.json",
-)
+
+
+def encontrar_git():
+    git = shutil.which("git")
+    if git:
+        return git
+    caminhos_possiveis = [
+        r"C:\Program Files\Git\cmd\git.exe",
+        r"C:\Program Files\Git\bin\git.exe",
+        r"C:\Program Files (x86)\Git\cmd\git.exe",
+        r"C:\Program Files (x86)\Git\bin\git.exe",
+    ]
+    for caminho in caminhos_possiveis:
+        if os.path.exists(caminho):
+            return caminho
+    raise FileNotFoundError(
+        "O Git não foi encontrado no computador."
+    )
 
 
 def caminho_xlsx(data_semana):
@@ -81,45 +79,6 @@ def caminho_xlsx(data_semana):
     )
 
 
-# ============================================================
-# CONFIGURAÇÃO DO GIT
-# ============================================================
-
-GIT_REMOTE = "origin"
-GIT_BRANCH = "main"
-FAZER_PUSH_AUTOMATICO = True
-
-
-def encontrar_git():
-
-    git = shutil.which("git")
-
-    if git:
-        return git
-
-    caminhos_possiveis = [
-        r"C:\Program Files\Git\cmd\git.exe",
-        r"C:\Program Files\Git\bin\git.exe",
-        r"C:\Program Files (x86)\Git\cmd\git.exe",
-        r"C:\Program Files (x86)\Git\bin\git.exe",
-    ]
-
-    for caminho in caminhos_possiveis:
-
-        if os.path.exists(caminho):
-            return caminho
-
-    raise FileNotFoundError(
-        "O Git não foi encontrado no computador."
-    )
-
-
-GIT_EXECUTAVEL = encontrar_git()
-
-# ============================================================
-# HISTÓRICO
-# ============================================================
-
 def carregar_historico():
     colunas = [
         "semana",
@@ -127,19 +86,15 @@ def carregar_historico():
         "dom_seg_ter",
         "qui_sex_sab",
     ]
-
     if not os.path.exists(ARQUIVO_HISTORICO):
         return pd.DataFrame(columns=colunas)
-
     historico = pd.read_csv(
         ARQUIVO_HISTORICO,
         encoding="utf-8-sig",
     )
-
     for coluna in colunas:
         if coluna not in historico.columns:
             historico[coluna] = ""
-
     return historico[colunas].fillna("")
 
 
@@ -154,27 +109,21 @@ def salvar_historico(historico):
 def ordenar_historico(historico):
     if historico.empty:
         return historico
-
     temp = historico.copy()
-
     temp["_data"] = pd.to_datetime(
         temp["semana"],
         format="%d/%m/%Y",
         errors="coerce",
     )
-
     ordem = {
         pessoa: i
         for i, pessoa in enumerate(PESSOAS)
     }
-
     temp["_ordem_pessoa"] = temp["pessoa"].map(ordem)
-
     temp = temp.sort_values([
         "_data",
         "_ordem_pessoa",
     ])
-
     return (
         temp
         .drop(columns=["_data", "_ordem_pessoa"])
@@ -182,1040 +131,273 @@ def ordenar_historico(historico):
     )
 
 
-def garantir_semana_fixa(historico):
-    data_fixa = "06/09/2026"
-
-    historico = historico[
-        historico["semana"] != data_fixa
-    ].copy()
-
-    registros = []
-
-    for pessoa in PESSOAS:
-        registros.append({
-            "semana": data_fixa,
-            "pessoa": pessoa,
-            "dom_seg_ter": ESCALA_FIXA_06_09[pessoa]["DOM/SEG/TER"],
-            "qui_sex_sab": ESCALA_FIXA_06_09[pessoa]["QUI/SEX/SÁB"],
-        })
-
-    historico = pd.concat(
-        [historico, pd.DataFrame(registros)],
-        ignore_index=True,
-    )
-
-    return ordenar_historico(historico)
-
-
 def historico_antes_da_data(historico, data_nova):
     if historico.empty:
         return historico.copy()
-
     datas = pd.to_datetime(
         historico["semana"],
         format="%d/%m/%Y",
         errors="coerce",
     )
-
     return historico[datas < data_nova].copy()
 
 
-# ============================================================
-# HISTÓRICO RECENTE
-# ============================================================
-
-def ultimas_semanas_participadas(
-    historico,
-    pessoa,
-    quantidade=2,
-):
-    dados = historico[
-        historico["pessoa"] == pessoa
-    ].copy()
-
-    if dados.empty:
-        return []
-
-    dados = dados[
-        ~(
-            (dados["dom_seg_ter"] == "AUSENTE")
-            &
-            (dados["qui_sex_sab"] == "AUSENTE")
-        )
-    ].copy()
-
-    if dados.empty:
-        return []
-
-    dados["_data"] = pd.to_datetime(
-        dados["semana"],
-        format="%d/%m/%Y",
-        errors="coerce",
-    )
-
-    dados = dados.sort_values(
-        "_data",
-        ascending=False,
-    )
-
-    return [
-        linha
-        for _, linha in dados.head(quantidade).iterrows()
-    ]
+def garantir_semana_fixa(historico):
+    """Completa a semana-base sem sobrescrever nenhuma linha já registrada."""
+    data_fixa = "06/09/2026"
+    existentes = set(historico.loc[historico['semana'] == data_fixa, 'pessoa'])
+    faltantes = [p for p in PESSOAS if p not in existentes]
+    if not faltantes:
+        return ordenar_historico(historico)
+    base_json = carregar_json_site().get('2026-09-06', {}).get('pessoas', {})
+    registros = []
+    for pessoa in faltantes:
+        base = base_json.get(pessoa, {})
+        registros.append({
+            'semana': data_fixa, 'pessoa': pessoa,
+            'dom_seg_ter': base.get('dom_seg_ter', ESCALA_FIXA_06_09[pessoa]['DOM/SEG/TER']),
+            'qui_sex_sab': base.get('qui_sex_sab', ESCALA_FIXA_06_09[pessoa]['QUI/SEX/SÁB']),
+        })
+    return ordenar_historico(pd.concat([historico, pd.DataFrame(registros)], ignore_index=True))
 
 
-def fez_tarefa_nas_ultimas_semanas(
-    historico,
-    pessoa,
-    tarefa,
-    quantidade=1,
-):
-    semanas = ultimas_semanas_participadas(
-        historico,
-        pessoa,
-        quantidade,
-    )
-
-    for semana in semanas:
-        if (
-            semana["dom_seg_ter"] == tarefa
-            or semana["qui_sex_sab"] == tarefa
-        ):
-            return True
-
-    return False
+def normalizar_nome(nome):
+    return ''.join(c for c in unicodedata.normalize('NFD', nome.strip().upper())
+                   if unicodedata.category(c) != 'Mn')
 
 
-def ultima_semana_participada(historico, pessoa):
-    semanas = ultimas_semanas_participadas(
-        historico,
-        pessoa,
-        quantidade=1,
-    )
-
-    return semanas[0] if semanas else None
-
-
-def pessoas_com_folga_obrigatoria(
-    historico,
-    presentes,
-):
-    obrigatorias = []
-
-    for pessoa in presentes:
-        ultima = ultima_semana_participada(
-            historico,
-            pessoa,
-        )
-
-        if ultima is None:
+def validar_ausentes(nomes):
+    mapa = {normalizar_nome(p): p for p in PESSOAS}
+    resultado = set()
+    for nome in nomes or []:
+        chave = normalizar_nome(nome)
+        if not chave:
             continue
-
-        teve_folga = (
-            ultima["dom_seg_ter"] == "FOLGA"
-            or ultima["qui_sex_sab"] == "FOLGA"
-        )
-
-        if not teve_folga:
-            obrigatorias.append(pessoa)
-
-    return obrigatorias
+        if chave not in mapa:
+            raise ValueError(f"Nome inválido: {nome}. Use: {', '.join(PESSOAS)}")
+        resultado.add(mapa[chave])
+    return resultado
 
 
-# ============================================================
-# CONTAGENS
-# ============================================================
-
-def tarefas_da_pessoa(historico, pessoa):
-    tarefas = []
-
-    registros = historico[
-        historico["pessoa"] == pessoa
-    ]
-
-    for _, linha in registros.iterrows():
-        for coluna in ["dom_seg_ter", "qui_sex_sab"]:
-            tarefa = linha[coluna]
-
-            if tarefa not in ["", "AUSENTE"]:
-                tarefas.append(tarefa)
-
-    return tarefas
-
-
-def quantidade_tarefa(historico, pessoa, tarefa):
-    return tarefas_da_pessoa(
-        historico,
-        pessoa,
-    ).count(tarefa)
+def contexto_historico(historico):
+    contexto = {}
+    historico = ordenar_historico(historico)
+    for pessoa in PESSOAS:
+        linhas = historico[historico['pessoa'] == pessoa].to_dict('records')
+        semanas = [r for r in linhas if any(r[b] not in ('', 'AUSENTE') for b in BLOCOS)]
+        eventos = [r[b] for r in linhas for b in BLOCOS if r[b] != '']
+        trabalhos = [t for t in eventos if t not in SEM_TAREFA]
+        ultima = semanas[-1] if semanas else None
+        contexto[pessoa] = {
+            'ultimo_evento': eventos[-1] if eventos else None,
+            'ultimo_trabalho': trabalhos[-1] if trabalhos else None,
+            'contagens': Counter(trabalhos), 'folgas': eventos.count('FOLGA'),
+            'total': len(trabalhos),
+            'dificeis': sum(t in TAREFAS_DIFICEIS for t in trabalhos),
+            'recente1': {ultima[b] for b in BLOCOS} if ultima else set(),
+            'recente2': {r[b] for r in semanas[-2:] for b in BLOCOS},
+            'folga_anterior': bool(ultima and any(ultima[b] == 'FOLGA' for b in BLOCOS)),
+            # Ausência parcial não conta como dois blocos de trabalho.
+            'folga_obrigatoria': bool(ultima and all(ultima[b] not in SEM_TAREFA for b in BLOCOS)),
+        }
+    return contexto
 
 
-def quantidade_folgas(historico, pessoa):
-    return quantidade_tarefa(
-        historico,
-        pessoa,
-        "FOLGA",
-    )
+def buscar_escala(presentes_inicio, presentes_fim, tarefas_inicio, tarefas_fim, contexto, obrigatorias, data_semana):
+    """Busca com retrocesso: só reduz tarefas depois de esgotar o modo completo."""
+    presentes = (set(presentes_inicio), set(presentes_fim))
+    tarefas = (tuple(tarefas_inicio), tuple(tarefas_fim))
+    obrigatorias = set(obrigatorias)
+    obrigatorias_inicio = {p for p in presentes[0] if contexto[p]['ultimo_evento'] in TAREFAS_DIFICEIS}
+    impossiveis_fim = set()
 
+    def ultimo_trabalho(pessoa, anterior):
+        tarefa = anterior.get(pessoa)
+        return tarefa if tarefa not in SEM_TAREFA and tarefa is not None else contexto[pessoa]['ultimo_trabalho']
 
-def quantidade_dificeis(historico, pessoa):
-    return sum(
-        quantidade_tarefa(
-            historico,
-            pessoa,
-            tarefa,
-        )
-        for tarefa in TAREFAS_DIFICEIS
-    )
+    def opcoes_folga(indice, anterior):
+        disponiveis = presentes[indice]
+        vagas = len(disponiveis) - len(tarefas[indice])
+        if vagas < 0:
+            return []
+        if indice == 0:
+            necessarias = obrigatorias_inicio
+            minimo_semanais = max(0, len(obrigatorias) - max(0, len(presentes[1]) - len(tarefas[1])))
+        else:
+            necessarias = {p for p in disponiveis if anterior.get(p) in TAREFAS_DIFICEIS}
+            necessarias |= {p for p in obrigatorias if anterior.get(p) != 'FOLGA'}
+            minimo_semanais = 0
+        if not necessarias <= disponiveis or len(necessarias) > vagas:
+            return []
+        livres = sorted(disponiveis - necessarias)
+        opcoes = []
+        for extra in itertools.combinations(livres, vagas - len(necessarias)):
+            folgas = necessarias | set(extra)
+            if indice == 0 and len(folgas & obrigatorias) < minimo_semanais:
+                continue
+            prioridade = (
+                -len(folgas & obrigatorias),
+                sum(anterior.get(p) == 'FOLGA' for p in folgas),
+                sum(contexto[p]['folga_anterior'] for p in folgas),
+                sum(contexto[p]['folgas'] for p in folgas), random.random(),
+            )
+            opcoes.append((prioridade, folgas))
+        opcoes.sort(key=lambda item: item[0])
+        return [folgas for _, folgas in opcoes]
 
+    def distribuir(indice, anterior):
+        assinatura = tuple('D' if anterior.get(p) in TAREFAS_DIFICEIS else
+                           'F' if anterior.get(p) == 'FOLGA' else
+                           'A' if anterior.get(p) == 'AUSENTE' else 'L' for p in PESSOAS)
+        if indice == 1 and assinatura in impossiveis_fim:
+            return None
+        for folgas in opcoes_folga(indice, anterior):
+            escala = {p: ('AUSENTE' if p not in presentes[indice] else 'FOLGA') for p in PESSOAS}
+            trabalhando = presentes[indice] - folgas
 
-def quantidade_total_tarefas(historico, pessoa):
-    return sum(
-        tarefa != "FOLGA"
-        for tarefa in tarefas_da_pessoa(
-            historico,
-            pessoa,
-        )
-    )
+            def candidatos(tarefa, livres):
+                nomes = [p for p in PESSOAS if p in livres]
+                if tarefa == 'Panos':
+                    nomes = [p for p in nomes if p not in PROIBIDO_PANOS]
+                if tarefa in TAREFAS_DIFICEIS:
+                    nomes = [p for p in nomes if ultimo_trabalho(p, anterior) not in TAREFAS_DIFICEIS]
+                if indice == 0 and data_semana == datetime(2026, 9, 13):
+                    nomes = [p for p in nomes if (p == 'KOMIXÃO') == (tarefa == 'Panos')]
+                def prioridade(p):
+                    c = contexto[p]
+                    prioridade_dificil = 0
+                    if tarefa in TAREFAS_DIFICEIS:
+                        prioridade_dificil = int(not (
+                            anterior.get(p) == 'FOLGA' if indice == 1 else c['folga_anterior']
+                        ))
+                    return (prioridade_dificil, anterior.get(p) == tarefa,
+                            tarefa in c['recente1'], tarefa in c['recente2'], c['contagens'][tarefa],
+                            c['dificeis'] if tarefa in TAREFAS_DIFICEIS else 0,
+                            c['total'], random.random())
+                return sorted(nomes, key=prioridade)
 
+            def atribuir(restantes, livres):
+                if not restantes:
+                    if indice == 0:
+                        segundo = distribuir(1, escala)
+                        return (escala.copy(), segundo) if segundo is not None else None
+                    return escala.copy()
+                possibilidades = [(t, candidatos(t, livres)) for t in restantes]
+                tarefa, nomes = min(possibilidades, key=lambda item: (len(item[1]), item[0] not in TAREFAS_DIFICEIS))
+                if not nomes:
+                    return None
+                outras = tuple(t for t in restantes if t != tarefa)
+                for pessoa in nomes:
+                    escala[pessoa] = tarefa
+                    # Só há duas vagas de folga no fim? Não escolha mais difíceis
+                    # do que essas vagas permitem, contando as folgas semanais.
+                    if indice == 0:
+                        folgas_fim = {p for p in presentes[1] if escala[p] in TAREFAS_DIFICEIS}
+                        folgas_fim |= {p for p in obrigatorias if p not in folgas}
+                        if len(folgas_fim) > len(presentes[1]) - len(tarefas[1]):
+                            escala[pessoa] = 'FOLGA'
+                            continue
+                    resultado = atribuir(outras, livres - {pessoa})
+                    if resultado is not None:
+                        return resultado
+                    escala[pessoa] = 'FOLGA'
+                return None
 
-# ============================================================
-# REGRAS DE TAREFA
-# ============================================================
-
-def tarefa_permitida(pessoa, tarefa):
-    if (
-        tarefa == "Panos"
-        and pessoa in PROIBIDO_PANOS
-    ):
-        return False
-
-    return True
-
-
-def ultima_tarefa_executada(historico, pessoa):
-    dados = historico[
-        historico["pessoa"] == pessoa
-    ].copy()
-
-    if dados.empty:
+            resultado = atribuir(tarefas[indice], trabalhando)
+            if resultado is not None:
+                return resultado
+        if indice == 1:
+            impossiveis_fim.add(assinatura)
         return None
 
-    dados["_data"] = pd.to_datetime(
-        dados["semana"],
-        format="%d/%m/%Y",
-        errors="coerce",
-    )
-
-    dados = dados.sort_values(
-        "_data",
-        ascending=False,
-    )
-
-    for _, linha in dados.iterrows():
-        for coluna in [
-            "qui_sex_sab",
-            "dom_seg_ter",
-        ]:
-            tarefa = linha[coluna]
-
-            if tarefa not in [
-                "",
-                "FOLGA",
-                "AUSENTE",
-            ]:
-                return tarefa
-
-    return None
-
-
-def pode_receber_tarefa_dificil(
-    historico,
-    pessoa,
-    escala_anterior=None,
-):
-    # Se existe um bloco anterior na semana atual e a pessoa
-    # trabalhou nele, essa é a tarefa imediatamente anterior.
-    if escala_anterior is not None:
-        tarefa_anterior = escala_anterior.get(pessoa)
-
-        if tarefa_anterior not in [
-            None,
-            "",
-            "FOLGA",
-            "AUSENTE",
-        ]:
-            return tarefa_anterior not in TAREFAS_DIFICEIS
-
-    # Se a pessoa folgou no bloco anterior, ou estamos distribuindo
-    # o primeiro bloco da semana, busca a última tarefa realmente
-    # executada no histórico.
-    tarefa_anterior = ultima_tarefa_executada(
-        historico,
-        pessoa,
-    )
-
-    return tarefa_anterior not in TAREFAS_DIFICEIS
-
-
-def escolher_pessoa(
-    candidatos,
-    tarefa,
-    historico,
-    escala_anterior=None,
-):
-    candidatos = [
-        pessoa
-        for pessoa in candidatos
-        if tarefa_permitida(
-            pessoa,
-            tarefa,
-        )
-    ]
-
-    if not candidatos:
-        raise ValueError(
-            f"Não há pessoa disponível para a tarefa '{tarefa}'."
-        )
-
-    # REGRA OBRIGATÓRIA:
-    # quem fez uma tarefa difícil imediatamente antes
-    # não pode receber outra tarefa difícil em seguida.
-    if tarefa in TAREFAS_DIFICEIS:
-        candidatos = [
-            pessoa
-            for pessoa in candidatos
-            if pode_receber_tarefa_dificil(
-                historico,
-                pessoa,
-                escala_anterior,
-            )
-        ]
-
-        if not candidatos:
-            raise ValueError(
-                "Não foi possível distribuir a tarefa difícil "
-                f"'{tarefa}' sem colocar duas tarefas difíceis "
-                "seguidas para a mesma pessoa."
-            )
-
-    candidatos_originais = candidatos.copy()
-
-    # 1. Evita a tarefa da última semana
-    sem_rep_1 = [
-        pessoa
-        for pessoa in candidatos
-        if not fez_tarefa_nas_ultimas_semanas(
-            historico,
-            pessoa,
-            tarefa,
-            quantidade=1,
-        )
-    ]
-
-    if sem_rep_1:
-        candidatos = sem_rep_1
-    else:
-        candidatos = candidatos_originais.copy()
-
-    # 2. Evita também as duas últimas semanas, se possível
-    sem_rep_2 = [
-        pessoa
-        for pessoa in candidatos
-        if not fez_tarefa_nas_ultimas_semanas(
-            historico,
-            pessoa,
-            tarefa,
-            quantidade=2,
-        )
-    ]
-
-    if sem_rep_2:
-        candidatos = sem_rep_2
-
-    # 3. Quem menos fez a tarefa
-    menor_tarefa = min(
-        quantidade_tarefa(
-            historico,
-            pessoa,
-            tarefa,
-        )
-        for pessoa in candidatos
-    )
-
-    candidatos = [
-        pessoa
-        for pessoa in candidatos
-        if quantidade_tarefa(
-            historico,
-            pessoa,
-            tarefa,
-        ) == menor_tarefa
-    ]
-
-    # 4. Tarefa difícil
-    if tarefa in TAREFAS_DIFICEIS:
-        menor_dificil = min(
-            quantidade_dificeis(
-                historico,
-                pessoa,
-            )
-            for pessoa in candidatos
-        )
-
-        candidatos = [
-            pessoa
-            for pessoa in candidatos
-            if quantidade_dificeis(
-                historico,
-                pessoa,
-            ) == menor_dificil
-        ]
-
-    # 5. Menor quantidade total de tarefas
-    menor_total = min(
-        quantidade_total_tarefas(
-            historico,
-            pessoa,
-        )
-        for pessoa in candidatos
-    )
-
-    candidatos = [
-        pessoa
-        for pessoa in candidatos
-        if quantidade_total_tarefas(
-            historico,
-            pessoa,
-        ) == menor_total
-    ]
-
-    return random.choice(candidatos)
-
-
-# ============================================================
-# FOLGAS
-# ============================================================
-
-def teve_folga_na_ultima_semana(historico, pessoa):
-    ultima = ultima_semana_participada(
-        historico,
-        pessoa,
-    )
-
-    if ultima is None:
-        return False
-
-    return (
-        ultima["dom_seg_ter"] == "FOLGA"
-        or ultima["qui_sex_sab"] == "FOLGA"
-    )
-
-
-def escolher_folga_inicio(
-    presentes,
-    folgas_obrigatorias,
-    historico,
-    data_semana,
-):
-    qtd_folgas_inicio = (
-        len(presentes)
-        - len(TAREFAS_INICIO)
-    )
-
-    qtd_folgas_fim = (
-        len(presentes)
-        - len(TAREFAS_FIM)
-    )
-
-    if qtd_folgas_inicio < 0:
-        raise ValueError(
-            "Não há pessoas suficientes para as 6 tarefas de DOM/SEG/TER."
-        )
-
-    if qtd_folgas_fim < 0:
-        raise ValueError(
-            "Não há pessoas suficientes para as 5 tarefas de QUI/SEX/SÁB."
-        )
-
-    total_vagas = qtd_folgas_inicio + qtd_folgas_fim
-
-    if len(folgas_obrigatorias) > total_vagas:
-        raise ValueError(
-            "Não é possível cumprir todas as folgas obrigatórias nesta semana."
-        )
-
-    obrigatorias = set(folgas_obrigatorias)
-
-    # Precisamos deixar para o segundo bloco, no máximo,
-    # a quantidade de folgas que realmente cabe nele.
-    minimo_obrigatorias_no_inicio = max(
-        0,
-        len(obrigatorias) - qtd_folgas_fim,
-    )
-
-    possibilidades = []
-
-    for combo in itertools.combinations(
-        presentes,
-        qtd_folgas_inicio,
-    ):
-        folgas = set(combo)
-
-        # REGRA OBRIGATÓRIA: quem terminou a última semana fazendo
-        # uma tarefa difícil no segundo bloco precisa folgar agora,
-        # no primeiro bloco desta semana.
-        folga_imediata_apos_dificil = {
-            pessoa
-            for pessoa in presentes
-            if (
-                (ultima := ultima_semana_participada(historico, pessoa)) is not None
-                and ultima["qui_sex_sab"] in TAREFAS_DIFICEIS
-            )
-        }
-
-        if not folga_imediata_apos_dificil.issubset(folgas):
-            continue
-
-        obrigatorias_escolhidas = len(
-            folgas & obrigatorias
-        )
-
-        if (
-            obrigatorias_escolhidas
-            < minimo_obrigatorias_no_inicio
-        ):
-            continue
-
-        # Prioridades, nesta ordem:
-        # 1) colocar o maior número possível de folgas obrigatórias aqui;
-        # 2) evitar repetir folga de uma semana para a outra;
-        # 3) equilibrar a quantidade histórica de folgas;
-        # 4) desempatar aleatoriamente.
-        # Entre as pessoas com folga obrigatória, é útil colocar
-        # no primeiro bloco quem NÃO poderia receber uma tarefa difícil.
-        # Assim deixamos trabalhando quem pode pegar Cozinha/Geladeira
-        # e depois receber folga no segundo bloco.
-        inaptos_para_dificil = sum(
-            pessoa in obrigatorias
-            and not pode_receber_tarefa_dificil(
-                historico,
-                pessoa,
-            )
-            for pessoa in folgas
-        )
-
-        prioridade = (
-            -obrigatorias_escolhidas,
-            -inaptos_para_dificil,
-            sum(
-                teve_folga_na_ultima_semana(
-                    historico,
-                    pessoa,
-                )
-                for pessoa in folgas
-            ),
-            sum(
-                quantidade_folgas(
-                    historico,
-                    pessoa,
-                )
-                for pessoa in folgas
-            ),
-            random.random(),
-        )
-
-        possibilidades.append((
-            prioridade,
-            folgas,
-        ))
-
-    if not possibilidades:
-        raise ValueError(
-            "Não foi encontrada uma combinação válida de folgas "
-            "para DOM/SEG/TER."
-        )
-
-    possibilidades.sort(
-        key=lambda item: item[0]
-    )
-
-    return possibilidades[0][1]
-
-
-def escolher_folga_fim(
-    presentes,
-    folgas_obrigatorias,
-    folga_inicio,
-    escala_inicio,
-    historico,
-):
-    qtd_folgas_fim = (
-        len(presentes)
-        - len(TAREFAS_FIM)
-    )
-
-    obrigatorias_restantes = (
-        set(folgas_obrigatorias)
-        - set(folga_inicio)
-    )
-
-    # REGRA OBRIGATÓRIA:
-    # quem executou uma tarefa difícil no primeiro bloco deve folgar
-    # no segundo bloco. Não é apenas uma prioridade de desempate.
-    fizeram_dificil_inicio = {
-        pessoa
-        for pessoa in presentes
-        if escala_inicio.get(pessoa) in TAREFAS_DIFICEIS
-    }
-
-    folgas_obrigatorias_fim = (
-        obrigatorias_restantes
-        | fizeram_dificil_inicio
-    )
-
-    if len(folgas_obrigatorias_fim) > qtd_folgas_fim:
-        raise ValueError(
-            "Não há vagas de folga suficientes no segundo bloco para "
-            "cumprir simultaneamente as folgas obrigatórias do histórico "
-            "e a folga obrigatória de quem fez tarefa difícil no primeiro bloco."
-        )
-
-    possibilidades = []
-
-    for combo in itertools.combinations(
-        presentes,
-        qtd_folgas_fim,
-    ):
-        folgas = set(combo)
-
-        # A combinação só é válida se incluir TODAS as pessoas que
-        # precisam obrigatoriamente folgar no segundo bloco, inclusive
-        # quem acabou de executar Cozinha, Geladeira ou outra tarefa difícil.
-        if not folgas_obrigatorias_fim.issubset(
-            folgas
-        ):
-            continue
-
-        qtd_dificeis_com_folga = len(
-            folgas & fizeram_dificil_inicio
-        )
-
-        qtd_repetem_folga_semana_anterior = sum(
-            teve_folga_na_ultima_semana(
-                historico,
-                pessoa,
-            )
-            for pessoa in folgas
-        )
-
-        qtd_folga_dupla = len(
-            folgas & set(folga_inicio)
-        )
-
-        historico_folgas = sum(
-            quantidade_folgas(
-                historico,
-                pessoa,
-            )
-            for pessoa in folgas
-        )
-
-        # Prioridades, nesta ordem:
-        # 1) dar folga a quem fez tarefa difícil no primeiro bloco;
-        # 2) evitar folga em semanas consecutivas;
-        # 3) evitar duas folgas na mesma semana;
-        # 4) equilibrar o total histórico de folgas;
-        # 5) desempatar aleatoriamente.
-        prioridade = (
-            -qtd_dificeis_com_folga,
-            qtd_folga_dupla,
-            qtd_repetem_folga_semana_anterior,
-            historico_folgas,
-            random.random(),
-        )
-
-        possibilidades.append((
-            prioridade,
-            folgas,
-        ))
-
-    if not possibilidades:
-        raise ValueError(
-            "Não foi encontrada uma combinação válida de folgas "
-            "para QUI/SEX/SÁB."
-        )
-
-    possibilidades.sort(
-        key=lambda item: item[0]
-    )
-
-    return possibilidades[0][1]
-
-
-# ============================================================
-# DISTRIBUIÇÃO
-# ============================================================
-
-def distribuir_primeiro_bloco(
-    presentes,
-    folga_inicio,
-    historico,
-    data_semana,
-    folgas_obrigatorias=None,
-):
-    escala = {}
-
-    folgas_obrigatorias = set(
-        folgas_obrigatorias or []
-    )
-
-    disponiveis = [
-        pessoa
-        for pessoa in presentes
-        if pessoa not in folga_inicio
-    ]
-
-    for pessoa in folga_inicio:
-        escala[pessoa] = "FOLGA"
-
-    tarefas = TAREFAS_INICIO.copy()
-
-    # Regra especial 13/09/2026
-    if data_semana == datetime(2026, 9, 13):
-        if "KOMIXÃO" not in presentes:
-            raise ValueError(
-                "KOMIXÃO está ausente em 13/09/2026, "
-                "mas precisa executar Panos."
-            )
-
-        escala["KOMIXÃO"] = "Panos"
-        disponiveis.remove("KOMIXÃO")
-        tarefas.remove("Panos")
-
-    # Distribui primeiro as tarefas difíceis. Se tarefas fáceis forem
-    # sorteadas antes, elas podem consumir todas as pessoas elegíveis
-    # e tornar impossível respeitar a regra de não fazer duas difíceis
-    # seguidas.
-    tarefas_dificeis = [
-        tarefa
-        for tarefa in tarefas
-        if tarefa in TAREFAS_DIFICEIS
-    ]
-
-    tarefas_normais = [
-        tarefa
-        for tarefa in tarefas
-        if tarefa not in TAREFAS_DIFICEIS
-    ]
-
-    random.shuffle(tarefas_dificeis)
-    random.shuffle(tarefas_normais)
-
-    tarefas_ordenadas = (
-        tarefas_dificeis
-        + tarefas_normais
-    )
-
-    # Quantas folgas, além das obrigatórias, inevitavelmente precisarão
-    # ser dadas a pessoas que já tiveram folga na semana anterior
-    # (considerando que evitamos folga dupla na mesma semana).
-    total_folgas_semana = (
-        len(presentes) - len(TAREFAS_INICIO)
-        + len(presentes) - len(TAREFAS_FIM)
-    )
-
-    folgas_extras_necessarias = max(
-        0,
-        total_folgas_semana - len(folgas_obrigatorias),
-    )
-
-    # Quando uma repetição de folga semanal for inevitável, tentamos
-    # fazer com que essa pessoa seja justamente alguém que fará uma
-    # tarefa difícil no primeiro bloco. Assim a folga repetida tem
-    # prioridade para quem fez Cozinha/Geladeira, em vez de cair em
-    # alguém com tarefa fácil como Panos.
-    dificeis_para_nao_obrigatorias = min(
-        folgas_extras_necessarias,
-        len(tarefas_dificeis),
-    )
-
-    for tarefa in tarefas_ordenadas:
-        candidatos = disponiveis.copy()
-
-        # Para tarefa difícil no primeiro bloco, prioriza quem ainda
-        # precisa obrigatoriamente de uma folga. Essa pessoa ficará
-        # candidata natural à folga no segundo bloco.
-        if tarefa in TAREFAS_DIFICEIS:
-            nao_obrigatorios_disponiveis = [
-                pessoa
-                for pessoa in candidatos
-                if pessoa not in folgas_obrigatorias
-                and pode_receber_tarefa_dificil(
-                    historico,
-                    pessoa,
-                )
-            ]
-
-            obrigatorios_disponiveis = [
-                pessoa
-                for pessoa in candidatos
-                if pessoa in folgas_obrigatorias
-                and pode_receber_tarefa_dificil(
-                    historico,
-                    pessoa,
-                )
-            ]
-
-            if (
-                dificeis_para_nao_obrigatorias > 0
-                and nao_obrigatorios_disponiveis
-            ):
-                # Como essa pessoa provavelmente será justamente a
-                # folga "extra" da semana, evitamos escolher quem já
-                # acumulou mais folgas no histórico.
-                menor_qtd_folgas = min(
-                    quantidade_folgas(
-                        historico,
-                        pessoa,
-                    )
-                    for pessoa in nao_obrigatorios_disponiveis
-                )
-
-                candidatos = [
-                    pessoa
-                    for pessoa in nao_obrigatorios_disponiveis
-                    if quantidade_folgas(
-                        historico,
-                        pessoa,
-                    ) == menor_qtd_folgas
-                ]
-
-                dificeis_para_nao_obrigatorias -= 1
-
-            elif obrigatorios_disponiveis:
-                candidatos = obrigatorios_disponiveis
-
-        pessoa = escolher_pessoa(
-            candidatos,
-            tarefa,
-            historico,
-        )
-
-        escala[pessoa] = tarefa
-        disponiveis.remove(pessoa)
-
-    return escala
-
-
-def distribuir_segundo_bloco(
-    presentes,
-    folga_fim,
-    escala_inicio,
-    historico,
-):
-    escala = {}
-
-    disponiveis = [
-        pessoa
-        for pessoa in presentes
-        if pessoa not in folga_fim
-    ]
-
-    for pessoa in folga_fim:
-        escala[pessoa] = "FOLGA"
-
-    tarefas_dificeis = [
-        "Cozinha",
-        "Armários cozinha",
-    ]
-
-    random.shuffle(tarefas_dificeis)
-
-    for tarefa in tarefas_dificeis:
-        # Primeiro elimina quem teria duas tarefas difíceis seguidas.
-        candidatos_validos = [
-            pessoa
-            for pessoa in disponiveis
-            if pode_receber_tarefa_dificil(
-                historico,
-                pessoa,
-                escala_inicio,
-            )
-        ]
-
-        if not candidatos_validos:
-            raise ValueError(
-                "Não foi possível distribuir as tarefas difíceis "
-                "sem repetir tarefa difícil em sequência."
-            )
-
-        # Entre os válidos, mantém a prioridade para quem folgou
-        # no primeiro bloco.
-        candidatos = [
-            pessoa
-            for pessoa in candidatos_validos
-            if escala_inicio[pessoa] == "FOLGA"
-        ]
-
-        if not candidatos:
-            candidatos = candidatos_validos.copy()
-
-        sem_repeticao_mesma_semana = [
-            pessoa
-            for pessoa in candidatos
-            if escala_inicio[pessoa] != tarefa
-        ]
-
-        if sem_repeticao_mesma_semana:
-            candidatos = sem_repeticao_mesma_semana
-
-        pessoa = escolher_pessoa(
-            candidatos,
-            tarefa,
-            historico,
-            escala_inicio,
-        )
-
-        escala[pessoa] = tarefa
-        disponiveis.remove(pessoa)
-
-    outras = [
-        "Área traseira da casa",
-        "Garagem",
-        "Sala e copa",
-    ]
-
-    random.shuffle(outras)
-
-    for tarefa in outras:
-        candidatos = [
-            pessoa
-            for pessoa in disponiveis
-            if escala_inicio[pessoa] != tarefa
-        ]
-
-        if not candidatos:
-            candidatos = disponiveis.copy()
-
-        pessoa = escolher_pessoa(
-            candidatos,
-            tarefa,
-            historico,
-        )
-
-        escala[pessoa] = tarefa
-        disponiveis.remove(pessoa)
-
-    return escala
-
-
-# ============================================================
-# GERAR SEMANA
-# ============================================================
-
-def gerar_semana(data_semana, ausentes):
-    historico = carregar_historico()
-    historico = garantir_semana_fixa(historico)
-
+    return distribuir(0, {})
+
+
+def validar_escala(escalas, ausencias, tarefas_blocos, contexto, obrigatorias):
+    """Validação final independente antes de permitir gravação/publicação."""
+    for indice, (escala, ausentes, esperadas) in enumerate(zip(escalas, ausencias, tarefas_blocos)):
+        if set(escala) != set(PESSOAS):
+            raise ValueError('A escala não contém todas as pessoas.')
+        reais = [t for t in escala.values() if t not in SEM_TAREFA]
+        if Counter(reais) != Counter(esperadas):
+            raise ValueError(f'Tarefas incompletas no bloco {ROTULOS_BLOCOS[indice]}.')
+        for p in PESSOAS:
+            tarefa = escala[p]
+            if (tarefa == 'AUSENTE') != (p in ausentes):
+                raise ValueError(f'Ausência incorreta para {p}.')
+            if tarefa == 'Panos' and p in PROIBIDO_PANOS:
+                raise ValueError(f'{p} não pode receber Panos.')
+            anterior = contexto[p]['ultimo_trabalho']
+            if indice == 1 and escalas[0][p] not in SEM_TAREFA:
+                anterior = escalas[0][p]
+            if tarefa in TAREFAS_DIFICEIS and anterior in TAREFAS_DIFICEIS:
+                raise ValueError(f'Duas tarefas difíceis seguidas para {p}.')
+            if indice == 0 and p not in ausentes and contexto[p]['ultimo_evento'] in TAREFAS_DIFICEIS and tarefa != 'FOLGA':
+                raise ValueError(f'Falta folga após tarefa difícil de {p}.')
+            if indice == 1 and escalas[0][p] in TAREFAS_DIFICEIS and p not in ausentes and tarefa != 'FOLGA':
+                raise ValueError(f'Falta folga no segundo bloco para {p}.')
+    for p in obrigatorias:
+        if all(escala[p] != 'FOLGA' for escala in escalas):
+            raise ValueError(f'Falta a folga semanal obrigatória de {p}.')
+
+
+def gerar_semana(data_semana, ausentes_inicio, ausentes_fim=None):
+    global ULTIMA_GERACAO
+    ULTIMA_GERACAO = {}
+    if data_semana.weekday() != 6:
+        raise ValueError('A data informada não é um domingo.')
+    ausencias = (validar_ausentes(ausentes_inicio), validar_ausentes(ausentes_fim))
+    historico = garantir_semana_fixa(carregar_historico())
     if data_semana == datetime(2026, 9, 6):
-        escala1 = {
-            pessoa: ESCALA_FIXA_06_09[pessoa]["DOM/SEG/TER"]
-            for pessoa in PESSOAS
+        if any(ausencias):
+            raise ValueError('06/09/2026 é uma semana histórica fixa. Não altere as presenças dessa semana.')
+        fixa = historico[historico['semana'] == '06/09/2026'].set_index('pessoa')
+        ULTIMA_GERACAO = {'modo': 'histórico fixo'}
+        return fixa['dom_seg_ter'].to_dict(), fixa['qui_sex_sab'].to_dict(), historico, []
+    texto = data_semana.strftime('%d/%m/%Y')
+    historico = historico[historico['semana'] != texto].copy()
+    contexto = contexto_historico(historico_antes_da_data(historico, data_semana))
+    presentes = tuple([p for p in PESSOAS if p not in bloco] for bloco in ausencias)
+    for indice, nomes in enumerate(presentes):
+        if len(nomes) < len(TAREFAS_OBRIGATORIAS[indice]):
+            raise ValueError(f'{ROTULOS_BLOCOS[indice]} tem {len(nomes)} pessoa(s) presente(s). '
+                             f'São necessárias pelo menos {len(TAREFAS_OBRIGATORIAS[indice])} para '
+                             + ', '.join(TAREFAS_OBRIGATORIAS[indice]) + ', sem acumular tarefas.')
+    if data_semana == datetime(2026, 9, 13) and 'KOMIXÃO' in ausencias[0]:
+        raise ValueError('KOMIXÃO precisa executar Panos em DOM/SEG/TER de 13/09/2026.')
+    # Uma ausência no bloco já dispensa a pessoa de trabalhar nele;
+    # não exigimos uma folga extra no único bloco em que ela comparece.
+    obrigatorias = [p for p in PESSOAS if contexto[p]['folga_obrigatoria']
+                    and p in presentes[0] and p in presentes[1]]
+    # Enumera todas as combinações de opcionais, mantendo as essenciais de cada bloco.
+    # Ordena pela quantidade TOTAL: só descarta uma tarefa quando nenhuma
+    # combinação maior consegue cumprir presenças, folgas e restrições.
+    opcionais = [[t for t in base if t not in TAREFAS_OBRIGATORIAS[i]]
+                 for i, base in enumerate((TAREFAS_INICIO, TAREFAS_FIM))]
+    combinacoes = []
+    for n0 in range(len(opcionais[0]), -1, -1):
+        for n1 in range(len(opcionais[1]), -1, -1):
+            for extra0 in itertools.combinations(opcionais[0], n0):
+                for extra1 in itertools.combinations(opcionais[1], n1):
+                    tarefas = tuple([t for t in base if t in TAREFAS_OBRIGATORIAS[i] or t in extras]
+                                    for i, (base, extras) in enumerate(zip((TAREFAS_INICIO, TAREFAS_FIM), (extra0, extra1))))
+                    combinacoes.append(tarefas)
+    combinacoes.sort(key=lambda t: -(len(t[0]) + len(t[1])))
+    for tarefas in combinacoes:
+        modo = 'completo' if tarefas == (TAREFAS_INICIO, TAREFAS_FIM) else 'adaptado'
+        resultado = buscar_escala(presentes[0], presentes[1], tarefas[0], tarefas[1], contexto, obrigatorias, data_semana)
+        if resultado is None:
+            continue
+        validar_escala(resultado, ausencias, tarefas, contexto, obrigatorias)
+        ULTIMA_GERACAO = {
+            'modo': modo,
+            'motivo_reducao': ('opcionais retiradas: ' + '; '.join(ROTULOS_BLOCOS[i] + ': ' + ', '.join(t for t in base if t not in tarefas[i]) for i, base in enumerate((TAREFAS_INICIO, TAREFAS_FIM)) if any(t not in tarefas[i] for t in base))) if modo == 'adaptado' else '',
         }
-
-        escala2 = {
-            pessoa: ESCALA_FIXA_06_09[pessoa]["QUI/SEX/SÁB"]
-            for pessoa in PESSOAS
-        }
-
-        return escala1, escala2, historico, []
-
-    data_texto = data_semana.strftime("%d/%m/%Y")
-
-    historico = historico[
-        historico["semana"] != data_texto
-    ].copy()
-
-    historico_anterior = historico_antes_da_data(
-        historico,
-        data_semana,
-    )
-
-    presentes = [
-        pessoa
-        for pessoa in PESSOAS
-        if pessoa not in ausentes
-    ]
-
-    if len(presentes) < 6:
-        raise ValueError(
-            "Não é possível gerar a escala: há menos de 6 pessoas presentes."
-        )
-
-    if (
-        data_semana == datetime(2026, 9, 13)
-        and "KOMIXÃO" in ausentes
-    ):
-        raise ValueError(
-            "KOMIXÃO não pode estar ausente em 13/09/2026, "
-            "pois precisa executar Panos."
-        )
-
-    folgas_obrigatorias = pessoas_com_folga_obrigatoria(
-        historico_anterior,
-        presentes,
-    )
-
-    # Primeiro escolhe apenas as folgas de DOM/SEG/TER.
-    # Depois de saber quais tarefas cada pessoa recebeu nesse bloco,
-    # escolhemos as folgas de QUI/SEX/SÁB. Assim conseguimos dar
-    # prioridade real de folga a quem acabou de executar uma tarefa difícil.
-    folga_inicio = escolher_folga_inicio(
-        presentes,
-        folgas_obrigatorias,
-        historico_anterior,
-        data_semana,
-    )
-
-    escala1 = distribuir_primeiro_bloco(
-        presentes,
-        folga_inicio,
-        historico_anterior,
-        data_semana,
-        folgas_obrigatorias,
-    )
-
-    folga_fim = escolher_folga_fim(
-        presentes,
-        folgas_obrigatorias,
-        folga_inicio,
-        escala1,
-        historico_anterior,
-    )
-
-    escala2 = distribuir_segundo_bloco(
-        presentes,
-        folga_fim,
-        escala1,
-        historico_anterior,
-    )
-
-    for pessoa in ausentes:
-        escala1[pessoa] = "AUSENTE"
-        escala2[pessoa] = "AUSENTE"
-
-    return (
-        escala1,
-        escala2,
-        historico,
-        folgas_obrigatorias,
-    )
+        return resultado[0], resultado[1], historico, obrigatorias
+    raise ValueError('Nem as tarefas obrigatórias têm combinação válida com as presenças e folgas obrigatórias. '
+                     'Confira os ausentes de cada bloco. Nenhuma escala foi salva; as regras não foram ignoradas.')
 
 
-# ============================================================
-# SALVAR CSV
-# ============================================================
 
 def salvar_semana_historico(
     historico,
@@ -1224,13 +406,10 @@ def salvar_semana_historico(
     escala2,
 ):
     data_texto = data_semana.strftime("%d/%m/%Y")
-
     historico = historico[
         historico["semana"] != data_texto
     ].copy()
-
     registros = []
-
     for pessoa in PESSOAS:
         registros.append({
             "semana": data_texto,
@@ -1238,27 +417,18 @@ def salvar_semana_historico(
             "dom_seg_ter": escala1[pessoa],
             "qui_sex_sab": escala2[pessoa],
         })
-
     historico = pd.concat(
         [historico, pd.DataFrame(registros)],
         ignore_index=True,
     )
-
     historico = ordenar_historico(historico)
-
     salvar_historico(historico)
-
     return historico
 
-
-# ============================================================
-# PUBLICAR NO JSON DO SITE
-# ============================================================
 
 def carregar_json_site():
     if not os.path.exists(ARQUIVO_JSON):
         return {}
-
     try:
         with open(
             ARQUIVO_JSON,
@@ -1266,8 +436,8 @@ def carregar_json_site():
             encoding="utf-8",
         ) as arquivo:
             return json.load(arquivo)
-    except json.JSONDecodeError:
-        return {}
+    except json.JSONDecodeError as erro:
+        raise ValueError("O arquivo escalas.json está inválido. Corrija-o antes de salvar a escala.") from erro
 
 
 def atualizar_json_site(
@@ -1276,9 +446,7 @@ def atualizar_json_site(
     escala2,
 ):
     escalas = carregar_json_site()
-
     chave = data_semana.strftime("%Y-%m-%d")
-
     escalas[chave] = {
         "atualizada_em": datetime.now().strftime(
             "%d/%m/%Y %H:%M"
@@ -1291,11 +459,9 @@ def atualizar_json_site(
             for pessoa in PESSOAS
         },
     }
-
     escalas = dict(
         sorted(escalas.items())
     )
-
     with open(
         ARQUIVO_JSON,
         "w",
@@ -1309,71 +475,56 @@ def atualizar_json_site(
         )
 
 
-# ============================================================
-# EXCEL
-# ============================================================
-
 def salvar_xlsx(
     data_semana,
     escala1,
     escala2,
 ):
     arquivo = caminho_xlsx(data_semana)
-
     wb = Workbook()
     ws = wb.active
     ws.title = data_semana.strftime("%d-%m-%Y")
-
     AZUL_ESCURO = "0B5A93"
     AZUL_QUARTA = "9DBBE8"
     VERMELHO = "FF0000"
     CINZA = "BFBFBF"
     BRANCO = "FFFFFF"
     PRETO = "000000"
-
     borda_fina = Side(
         style="thin",
         color=PRETO,
     )
-
     borda = Border(
         left=borda_fina,
         right=borda_fina,
         top=borda_fina,
         bottom=borda_fina,
     )
-
     alinhamento = Alignment(
         horizontal="center",
         vertical="center",
     )
-
     fonte_branca = Font(
         name="Arial",
         size=11,
         color=BRANCO,
     )
-
     fonte_branca_negrito = Font(
         name="Arial",
         size=11,
         bold=True,
         color=BRANCO,
     )
-
     fonte_normal = Font(
         name="Arial",
         size=11,
         color=PRETO,
     )
-
     ws.column_dimensions["A"].width = 17
     ws.column_dimensions["B"].width = 32
     ws.column_dimensions["C"].width = 32
     ws.column_dimensions["D"].width = 32
-
     ws.merge_cells("B1:D1")
-
     titulo = ws["B1"]
     titulo.value = (
         "TABELA DE TAREFAS - "
@@ -1381,7 +532,6 @@ def salvar_xlsx(
     )
     titulo.font = fonte_branca_negrito
     titulo.alignment = alinhamento
-
     for coluna in range(2, 5):
         celula = ws.cell(row=1, column=coluna)
         celula.fill = PatternFill(
@@ -1389,14 +539,12 @@ def salvar_xlsx(
             fgColor=AZUL_ESCURO,
         )
         celula.border = borda
-
     cabecalhos = [
         "",
         "DOMINGO/SEG/TERÇA",
         "QUARTA",
         "QUINTA/SEXTA/SÁB",
     ]
-
     for coluna, texto in enumerate(
         cabecalhos,
         start=1,
@@ -1408,20 +556,16 @@ def salvar_xlsx(
         celula.value = texto
         celula.alignment = alinhamento
         celula.border = borda
-
         if coluna > 1:
             celula.fill = PatternFill(
                 fill_type="solid",
                 fgColor=AZUL_ESCURO,
             )
             celula.font = fonte_branca_negrito
-
     linha = 3
-
     for pessoa in PESSOAS:
         tarefa1 = escala1[pessoa]
         tarefa2 = escala2[pessoa]
-
         nome = ws.cell(
             row=linha,
             column=1,
@@ -1434,9 +578,7 @@ def salvar_xlsx(
         nome.font = fonte_branca
         nome.alignment = alinhamento
         nome.border = borda
-
         c1 = ws.cell(row=linha, column=2)
-
         if tarefa1 == "FOLGA":
             c1.value = ""
             c1.fill = PatternFill(
@@ -1455,11 +597,9 @@ def salvar_xlsx(
                 fill_type="solid",
                 fgColor=BRANCO,
             )
-
         c1.font = fonte_normal
         c1.alignment = alinhamento
         c1.border = borda
-
         c2 = ws.cell(row=linha, column=3)
         c2.value = ""
         c2.fill = PatternFill(
@@ -1467,9 +607,7 @@ def salvar_xlsx(
             fgColor=AZUL_QUARTA,
         )
         c2.border = borda
-
         c3 = ws.cell(row=linha, column=4)
-
         if tarefa2 == "FOLGA":
             c3.value = ""
             c3.fill = PatternFill(
@@ -1488,41 +626,29 @@ def salvar_xlsx(
                 fill_type="solid",
                 fgColor=BRANCO,
             )
-
         c3.font = fonte_normal
         c3.alignment = alinhamento
         c3.border = borda
-
         ws.row_dimensions[linha].height = 22
         linha += 1
-
     ws.sheet_view.showGridLines = False
     wb.save(arquivo)
-
     return arquivo
 
 
-# ============================================================
-# GIT ADD / COMMIT / PUSH
-# ============================================================
-
 def executar_git(*args):
-
     resultado = subprocess.run(
-        [GIT_EXECUTAVEL, *args],
+        [encontrar_git(), *args],
         cwd=PASTA_SCRIPT,
         text=True,
         capture_output=True
     )
-
     if resultado.returncode != 0:
-
         raise RuntimeError(
             resultado.stderr.strip()
             or resultado.stdout.strip()
             or "Erro ao executar Git."
         )
-
     return resultado.stdout.strip()
 
 
@@ -1534,9 +660,7 @@ def sincronizar_github():
         "rev-parse",
         "--is-inside-work-tree",
     )
-
     print("Sincronizando com o GitHub...")
-
     executar_git(
         "pull",
         "--rebase",
@@ -1544,14 +668,12 @@ def sincronizar_github():
         GIT_REMOTE,
         GIT_BRANCH,
     )
-
     print("Git pull --rebase concluído.")
 
 
 def publicar_github(data_semana):
     # Confere se estamos dentro de um repositório
     executar_git("rev-parse", "--is-inside-work-tree")
-
     # Adiciona somente os arquivos relevantes do projeto
     arquivos = [
         "historico_limpeza.csv",
@@ -1561,53 +683,45 @@ def publicar_github(data_semana):
         "script.js",
         os.path.basename(__file__),
     ]
-
     xlsx_relativo = os.path.basename(
         caminho_xlsx(data_semana)
     )
     arquivos.append(xlsx_relativo)
-
     executar_git("add", *arquivos)
-
     # Verifica se existe alteração staged
     diff = subprocess.run(
         [
-            GIT_EXECUTAVEL,
+            encontrar_git(),
             "diff",
             "--cached",
             "--quiet"
         ],
         cwd=PASTA_SCRIPT,
+        capture_output=True,
+        text=True,
     )
-
+    if diff.returncode not in (0, 1):
+        raise RuntimeError(diff.stderr.strip() or "Erro ao verificar alterações do Git.")
     if diff.returncode == 0:
         print("Não há alterações novas para commit.")
         return
-
     mensagem = (
         "Atualiza escala "
         + data_semana.strftime("%d/%m/%Y")
     )
-
     executar_git(
         "commit",
         "-m",
         mensagem,
     )
-
     if FAZER_PUSH_AUTOMATICO:
         executar_git(
             "push",
             GIT_REMOTE,
             GIT_BRANCH,
         )
-
         print("Git push concluído com sucesso.")
 
-
-# ============================================================
-# TERMINAL
-# ============================================================
 
 def mostrar_escala(
     data_semana,
@@ -1622,7 +736,6 @@ def mostrar_escala(
         + data_semana.strftime("%d/%m/%Y")
     )
     print("=" * 100)
-
     df = pd.DataFrame(
         {
             "DOM/SEG/TER": [
@@ -1636,9 +749,10 @@ def mostrar_escala(
         },
         index=PESSOAS,
     )
-
+    print("Modo: " + ULTIMA_GERACAO.get("modo", "completo"))
+    if ULTIMA_GERACAO.get("motivo_reducao"):
+        print("Escala adaptada: " + ULTIMA_GERACAO["motivo_reducao"])
     print(df.to_string())
-
     if folgas_obrigatorias:
         print()
         print(
@@ -1647,151 +761,50 @@ def mostrar_escala(
         )
 
 
-def ler_ausentes():
-    print()
-    print(
-        "Digite as pessoas que NÃO participarão "
-        "da escala nesta semana."
-    )
-    print(
-        "Separe os nomes por vírgula. "
-        "Se todas estiverem presentes, pressione Enter."
-    )
+def ler_ausentes(bloco):
+    print(f'\nQuem estará AUSENTE em {bloco}?')
+    print('Separe os nomes por vírgula; pressione Enter se todas estiverem presentes.')
+    texto = input(f'Ausentes em {bloco}: ').strip()
+    nomes = validar_ausentes(texto.split(','))
+    return [p for p in PESSOAS if p in nomes]
 
-    texto = input("Ausentes: ").strip()
-
-    if not texto:
-        return []
-
-    nomes_digitados = [
-        nome.strip().upper()
-        for nome in texto.split(",")
-    ]
-
-    mapa = {
-        pessoa.upper(): pessoa
-        for pessoa in PESSOAS
-    }
-
-    ausentes = []
-
-    for nome in nomes_digitados:
-        if nome not in mapa:
-            raise ValueError(
-                f"Nome inválido: {nome}. "
-                f"Use um destes: {', '.join(PESSOAS)}"
-            )
-
-        pessoa_real = mapa[nome]
-
-        if pessoa_real not in ausentes:
-            ausentes.append(pessoa_real)
-
-    return ausentes
-
-
-# ============================================================
-# EXECUÇÃO
-# ============================================================
 
 def main():
-    print()
-    print("GERADOR DE ESCALA DE LIMPEZA")
-    print("=" * 50)
-
-    data_texto = input(
-        "Digite o domingo da nova escala (DD/MM/AAAA): "
-    ).strip()
-
-    data_semana = datetime.strptime(
-        data_texto,
-        "%d/%m/%Y",
-    )
-
+    print('\nGERADOR DE ESCALA DE LIMPEZA')
+    print('=' * 50)
+    data_semana = datetime.strptime(input('Digite o domingo da nova escala (DD/MM/AAAA): ').strip(), '%d/%m/%Y')
     if data_semana.weekday() != 6:
-        raise ValueError(
-            "A data informada não é um domingo."
-        )
-
-    ausentes = ler_ausentes()
-
-    # Antes de ler o histórico e gerar a nova escala,
-    # traz para a máquina qualquer alteração que esteja no GitHub.
+        raise ValueError('A data informada não é um domingo.')
+    ausentes_inicio = ler_ausentes('DOM/SEG/TER')
+    ausentes_fim = ler_ausentes('QUI/SEX/SÁB')
     if FAZER_PUSH_AUTOMATICO:
         print()
         sincronizar_github()
-
-    (
-        escala1,
-        escala2,
-        historico,
-        folgas_obrigatorias,
-    ) = gerar_semana(
-        data_semana,
-        ausentes,
-    )
-
-    mostrar_escala(
-        data_semana,
-        escala1,
-        escala2,
-        folgas_obrigatorias,
-    )
-
-    print()
-    resposta = input(
-        "Deseja salvar e publicar essa escala? (s/n): "
-    ).strip().lower()
-
-    if resposta != "s":
-        print("Escala não salva.")
+    escala1, escala2, historico, folgas_obrigatorias = gerar_semana(data_semana, ausentes_inicio, ausentes_fim)
+    mostrar_escala(data_semana, escala1, escala2, folgas_obrigatorias)
+    if input('\nDeseja salvar e publicar essa escala? (s/n): ').strip().lower() != 's':
+        print('Escala não salva.')
         return
-
-    salvar_semana_historico(
-        historico,
-        data_semana,
-        escala1,
-        escala2,
-    )
-
-    arquivo_xlsx = salvar_xlsx(
-        data_semana,
-        escala1,
-        escala2,
-    )
-
-    atualizar_json_site(
-        data_semana,
-        escala1,
-        escala2,
-    )
-
-    print()
-    print("Arquivos locais atualizados:")
-    print(f"- CSV:  {ARQUIVO_HISTORICO}")
-    print(f"- JSON: {ARQUIVO_JSON}")
-    print(f"- XLSX: {arquivo_xlsx}")
-
+    # Valida a integridade do JSON antes de alterar qualquer arquivo de dados.
+    carregar_json_site()
+    salvar_semana_historico(historico, data_semana, escala1, escala2)
+    arquivo_xlsx = salvar_xlsx(data_semana, escala1, escala2)
+    atualizar_json_site(data_semana, escala1, escala2)
+    print('\nArquivos locais atualizados:')
+    print(f'- CSV:  {ARQUIVO_HISTORICO}')
+    print(f'- JSON: {ARQUIVO_JSON}')
+    print(f'- XLSX: {arquivo_xlsx}')
     if FAZER_PUSH_AUTOMATICO:
-        print()
-        print("Publicando no GitHub...")
+        print('\nPublicando no GitHub...')
         publicar_github(data_semana)
-
-    print()
-    print("Concluído.")
+    print('\nConcluído.')
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     try:
         main()
-
-    except (
-        ValueError,
-        RuntimeError,
-        FileNotFoundError,
-        subprocess.SubprocessError,
-    ) as erro:
-        print()
-        print("ERRO:")
+    except (ValueError, RuntimeError, FileNotFoundError, subprocess.SubprocessError) as erro:
+        print('\nERRO:')
         print(erro)
         sys.exit(1)
+

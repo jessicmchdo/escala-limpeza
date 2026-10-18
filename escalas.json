@@ -162,5 +162,46 @@
         "qui_sex_sab": "Área traseira da casa"
       }
     }
+  },
+  "2026-10-18": {
+    "atualizada_em": "18/10/2026 11:10",
+    "pessoas": {
+      "JUKEBOX": {
+        "dom_seg_ter": "Panos",
+        "qui_sex_sab": "Garagem"
+      },
+      "LOTERYA": {
+        "dom_seg_ter": "Sala e copa",
+        "qui_sex_sab": "Área traseira da casa"
+      },
+      "KOMIXÃO": {
+        "dom_seg_ter": "AUSENTE",
+        "qui_sex_sab": "Cozinha"
+      },
+      "NAMOITA": {
+        "dom_seg_ter": "Cozinha",
+        "qui_sex_sab": "AUSENTE"
+      },
+      "NAZARÉ": {
+        "dom_seg_ter": "Geladeira",
+        "qui_sex_sab": "FOLGA"
+      },
+      "CAMILA": {
+        "dom_seg_ter": "Área frontal da casa",
+        "qui_sex_sab": "Armários cozinha"
+      },
+      "BAQUETADA": {
+        "dom_seg_ter": "FOLGA",
+        "qui_sex_sab": "Sala e copa"
+      },
+      "AMANDA": {
+        "dom_seg_ter": "FOLGA",
+        "qui_sex_sab": "FOLGA"
+      },
+      "BELA": {
+        "dom_seg_ter": "AUSENTE",
+        "qui_sex_sab": "AUSENTE"
+      }
+    }
   }
 }
