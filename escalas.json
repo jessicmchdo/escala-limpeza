@@ -205,10 +205,10 @@
     }
   },
   "2026-10-25": {
-    "atualizada_em": "21/10/2026 00:30",
+    "atualizada_em": "21/10/2026 00:44",
     "pessoas": {
       "JUKEBOX": {
-        "dom_seg_ter": "Sala e copa",
+        "dom_seg_ter": "Lavanderia",
         "qui_sex_sab": "FOLGA"
       },
       "LOTERYA": {
@@ -217,31 +217,31 @@
       },
       "KOMIXÃO": {
         "dom_seg_ter": "FOLGA",
-        "qui_sex_sab": "Área traseira da casa"
+        "qui_sex_sab": "Garagem"
       },
       "NAMOITA": {
         "dom_seg_ter": "AUSENTE",
         "qui_sex_sab": "AUSENTE"
       },
       "NAZARÉ": {
-        "dom_seg_ter": "Área frontal da casa",
-        "qui_sex_sab": "Cozinha"
+        "dom_seg_ter": "Sala e copa",
+        "qui_sex_sab": "Armários cozinha"
       },
       "CAMILA": {
         "dom_seg_ter": "FOLGA",
         "qui_sex_sab": "Sala e copa"
       },
       "BAQUETADA": {
-        "dom_seg_ter": "Panos",
-        "qui_sex_sab": "Armários cozinha"
-      },
-      "AMANDA": {
-        "dom_seg_ter": "AUSENTE",
-        "qui_sex_sab": "Garagem"
-      },
-      "BELA": {
         "dom_seg_ter": "Cozinha",
         "qui_sex_sab": "FOLGA"
+      },
+      "AMANDA": {
+        "dom_seg_ter": "Área frontal da casa",
+        "qui_sex_sab": "Área traseira da casa"
+      },
+      "BELA": {
+        "dom_seg_ter": "Panos",
+        "qui_sex_sab": "Cozinha"
       }
     }
   }

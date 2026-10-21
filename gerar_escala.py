@@ -15,7 +15,7 @@ import shutil
 import sys
 import unicodedata
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pandas as pd
 from openpyxl import Workbook
@@ -179,15 +179,19 @@ def validar_ausentes(nomes):
     return resultado
 
 
-def contexto_historico(historico):
+def contexto_historico(historico, data_semana=None):
     contexto = {}
     historico = ordenar_historico(historico)
+    semana_anterior = ((data_semana - timedelta(days=7)).strftime('%d/%m/%Y')
+                       if data_semana is not None else
+                       (historico.iloc[-1]['semana'] if not historico.empty else None))
     for pessoa in PESSOAS:
         linhas = historico[historico['pessoa'] == pessoa].to_dict('records')
         semanas = [r for r in linhas if any(r[b] not in ('', 'AUSENTE') for b in BLOCOS)]
         eventos = [r[b] for r in linhas for b in BLOCOS if r[b] != '']
         trabalhos = [t for t in eventos if t not in SEM_TAREFA]
         ultima = semanas[-1] if semanas else None
+        calendario = next((r for r in reversed(linhas) if r['semana'] == semana_anterior), None)
         contexto[pessoa] = {
             'ultimo_evento': eventos[-1] if eventos else None,
             'ultimo_trabalho': trabalhos[-1] if trabalhos else None,
@@ -196,15 +200,17 @@ def contexto_historico(historico):
             'dificeis': sum(t in TAREFAS_DIFICEIS for t in trabalhos),
             'recente1': {ultima[b] for b in BLOCOS} if ultima else set(),
             'recente2': {r[b] for r in semanas[-2:] for b in BLOCOS},
-            'folga_anterior': bool(ultima and any(ultima[b] == 'FOLGA' for b in BLOCOS)),
-            # Ausência parcial não conta como dois blocos de trabalho.
-            'folga_obrigatoria': bool(ultima and all(ultima[b] not in SEM_TAREFA for b in BLOCOS)),
+            'folga_anterior': bool(calendario and any(calendario[b] == 'FOLGA' for b in BLOCOS)),
+            # Só a semana imediatamente anterior determina a folga semanal.
+            # Não transfere uma obrigação de antes de uma semana AUSENTE.
+            'folga_obrigatoria': bool(calendario and all(calendario[b] not in SEM_TAREFA for b in BLOCOS)),
         }
     return contexto
 
 
-def buscar_escala(presentes_inicio, presentes_fim, tarefas_inicio, tarefas_fim, contexto, obrigatorias, data_semana):
+def buscar_escala(presentes_inicio, presentes_fim, tarefas_inicio, tarefas_fim, contexto, obrigatorias, data_semana, nao_podem_panos=None):
     """Busca com retrocesso: só reduz tarefas depois de esgotar o modo completo."""
+    bloqueados_panos = PROIBIDO_PANOS | validar_ausentes(nao_podem_panos)
     presentes = (set(presentes_inicio), set(presentes_fim))
     tarefas = (tuple(tarefas_inicio), tuple(tarefas_fim))
     obrigatorias = set(obrigatorias)
@@ -258,7 +264,7 @@ def buscar_escala(presentes_inicio, presentes_fim, tarefas_inicio, tarefas_fim, 
             def candidatos(tarefa, livres):
                 nomes = [p for p in PESSOAS if p in livres]
                 if tarefa == 'Panos':
-                    nomes = [p for p in nomes if p not in PROIBIDO_PANOS]
+                    nomes = [p for p in nomes if p not in bloqueados_panos]
                 if tarefa in TAREFAS_DIFICEIS:
                     nomes = [p for p in nomes if ultimo_trabalho(p, anterior) not in TAREFAS_DIFICEIS]
                 if indice == 0 and data_semana == datetime(2026, 9, 13):
@@ -313,8 +319,9 @@ def buscar_escala(presentes_inicio, presentes_fim, tarefas_inicio, tarefas_fim, 
     return distribuir(0, {})
 
 
-def validar_escala(escalas, ausencias, tarefas_blocos, contexto, obrigatorias):
+def validar_escala(escalas, ausencias, tarefas_blocos, contexto, obrigatorias, nao_podem_panos=None):
     """Validação final independente antes de permitir gravação/publicação."""
+    bloqueados_panos = PROIBIDO_PANOS | validar_ausentes(nao_podem_panos)
     for indice, (escala, ausentes, esperadas) in enumerate(zip(escalas, ausencias, tarefas_blocos)):
         if set(escala) != set(PESSOAS):
             raise ValueError('A escala não contém todas as pessoas.')
@@ -325,7 +332,7 @@ def validar_escala(escalas, ausencias, tarefas_blocos, contexto, obrigatorias):
             tarefa = escala[p]
             if (tarefa == 'AUSENTE') != (p in ausentes):
                 raise ValueError(f'Ausência incorreta para {p}.')
-            if tarefa == 'Panos' and p in PROIBIDO_PANOS:
+            if tarefa == 'Panos' and p in bloqueados_panos:
                 raise ValueError(f'{p} não pode receber Panos.')
             anterior = contexto[p]['ultimo_trabalho']
             if indice == 1 and escalas[0][p] not in SEM_TAREFA:
@@ -341,12 +348,13 @@ def validar_escala(escalas, ausencias, tarefas_blocos, contexto, obrigatorias):
             raise ValueError(f'Falta a folga semanal obrigatória de {p}.')
 
 
-def gerar_semana(data_semana, ausentes_inicio, ausentes_fim=None):
+def gerar_semana(data_semana, ausentes_inicio, ausentes_fim=None, nao_podem_panos=None):
     global ULTIMA_GERACAO
     ULTIMA_GERACAO = {}
     if data_semana.weekday() != 6:
         raise ValueError('A data informada não é um domingo.')
     ausencias = (validar_ausentes(ausentes_inicio), validar_ausentes(ausentes_fim))
+    nao_podem_panos = validar_ausentes(nao_podem_panos)
     historico = garantir_semana_fixa(carregar_historico())
     if data_semana == datetime(2026, 9, 6):
         if any(ausencias):
@@ -356,8 +364,11 @@ def gerar_semana(data_semana, ausentes_inicio, ausentes_fim=None):
         return fixa['dom_seg_ter'].to_dict(), fixa['qui_sex_sab'].to_dict(), historico, []
     texto = data_semana.strftime('%d/%m/%Y')
     historico = historico[historico['semana'] != texto].copy()
-    contexto = contexto_historico(historico_antes_da_data(historico, data_semana))
+    contexto = contexto_historico(historico_antes_da_data(historico, data_semana), data_semana)
     presentes = tuple([p for p in PESSOAS if p not in bloco] for bloco in ausencias)
+    if not (set(presentes[0]) - PROIBIDO_PANOS - nao_podem_panos):
+        raise ValueError('Nenhuma pessoa presente em DOM/SEG/TER pode fazer Panos nesta semana. '
+                         'Confira os impedimentos de Panos e as ausências. Nenhuma escala foi salva.')
     for indice, nomes in enumerate(presentes):
         if len(nomes) < len(TAREFAS_OBRIGATORIAS[indice]):
             raise ValueError(f'{ROTULOS_BLOCOS[indice]} tem {len(nomes)} pessoa(s) presente(s). '
@@ -385,12 +396,13 @@ def gerar_semana(data_semana, ausentes_inicio, ausentes_fim=None):
     combinacoes.sort(key=lambda t: -(len(t[0]) + len(t[1])))
     for tarefas in combinacoes:
         modo = 'completo' if tarefas == (TAREFAS_INICIO, TAREFAS_FIM) else 'adaptado'
-        resultado = buscar_escala(presentes[0], presentes[1], tarefas[0], tarefas[1], contexto, obrigatorias, data_semana)
+        resultado = buscar_escala(presentes[0], presentes[1], tarefas[0], tarefas[1], contexto, obrigatorias, data_semana, nao_podem_panos)
         if resultado is None:
             continue
-        validar_escala(resultado, ausencias, tarefas, contexto, obrigatorias)
+        validar_escala(resultado, ausencias, tarefas, contexto, obrigatorias, nao_podem_panos)
         ULTIMA_GERACAO = {
             'modo': modo,
+            'impedidos_panos': [p for p in PESSOAS if p in nao_podem_panos],
             'motivo_reducao': ('opcionais retiradas: ' + '; '.join(ROTULOS_BLOCOS[i] + ': ' + ', '.join(t for t in base if t not in tarefas[i]) for i, base in enumerate((TAREFAS_INICIO, TAREFAS_FIM)) if any(t not in tarefas[i] for t in base))) if modo == 'adaptado' else '',
         }
         return resultado[0], resultado[1], historico, obrigatorias
@@ -752,6 +764,9 @@ def mostrar_escala(
     print("Modo: " + ULTIMA_GERACAO.get("modo", "completo"))
     if ULTIMA_GERACAO.get("motivo_reducao"):
         print("Escala adaptada: " + ULTIMA_GERACAO["motivo_reducao"])
+    impedidos = ULTIMA_GERACAO.get('impedidos_panos', [])
+    if impedidos:
+        print('Não podem fazer Panos nesta semana: ' + ', '.join(impedidos))
     print(df.to_string())
     if folgas_obrigatorias:
         print()
@@ -769,6 +784,15 @@ def ler_ausentes(bloco):
     return [p for p in PESSOAS if p in nomes]
 
 
+def ler_impedidos_panos():
+    print('\nQuem não pode fazer Panos nesta semana?')
+    print('Separe os nomes por vírgula. Enter mantém somente as restrições permanentes.')
+    print('Essas pessoas continuam disponíveis para outras tarefas no bloco.')
+    print('NAZARÉ e CAMILA continuam proibidas de fazer Panos em qualquer semana.')
+    nomes = validar_ausentes(input('Não podem fazer Panos: ').strip().split(','))
+    return [p for p in PESSOAS if p in nomes]
+
+
 def main():
     print('\nGERADOR DE ESCALA DE LIMPEZA')
     print('=' * 50)
@@ -777,10 +801,11 @@ def main():
         raise ValueError('A data informada não é um domingo.')
     ausentes_inicio = ler_ausentes('DOM/SEG/TER')
     ausentes_fim = ler_ausentes('QUI/SEX/SÁB')
+    nao_podem_panos = ler_impedidos_panos()
     if FAZER_PUSH_AUTOMATICO:
         print()
         sincronizar_github()
-    escala1, escala2, historico, folgas_obrigatorias = gerar_semana(data_semana, ausentes_inicio, ausentes_fim)
+    escala1, escala2, historico, folgas_obrigatorias = gerar_semana(data_semana, ausentes_inicio, ausentes_fim, nao_podem_panos)
     mostrar_escala(data_semana, escala1, escala2, folgas_obrigatorias)
     if input('\nDeseja salvar e publicar essa escala? (s/n): ').strip().lower() != 's':
         print('Escala não salva.')
@@ -807,4 +832,5 @@ if __name__ == '__main__':
         print('\nERRO:')
         print(erro)
         sys.exit(1)
+
 
