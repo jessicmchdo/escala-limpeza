@@ -1,11 +1,32 @@
 'use strict';
 const F=window.Faxinas, $=F.$;
-let dados=[];
+let dados=[], publicadas={}, seguirSemanaAtual=true;
 function renderTasks() {
   const box=$('tarefas');box.replaceChildren();
-  const filtro=F.profile.is_admin?$('filtroPessoa').value:F.profile.pessoa;
-  const tasks=dados.filter(t=>!filtro || t.pessoa===filtro);
-  if(!tasks.length){box.append(F.element('p','Nenhuma faxina disponível para esta pessoa.','muted'));return;}
+  const semana=$('filtroSemana').value;
+  const tasks=dados.filter(t=>(!semana || t.semana===semana) && (F.profile.is_admin || t.pessoa===F.profile.pessoa));
+  const esperadas=[];
+  for(const [s,escala] of Object.entries(publicadas)) {
+    if(s<'2026-09-27' || (semana && s!==semana))continue;
+    for(const [pessoa,blocos] of Object.entries(escala.pessoas||{})) {
+      if(!F.profile.is_admin && pessoa!==F.profile.pessoa)continue;
+      for(const bloco of ['dom_seg_ter','qui_sex_sab']) {
+        const tarefa=String(blocos[bloco]||'').trim();
+        if(tarefa && !['FOLGA','AUSENTE'].includes(tarefa.toUpperCase()))esperadas.push({semana:s,pessoa,bloco});
+      }
+    }
+  }
+  const faltam=esperadas.filter(e=>!dados.some(t=>t.semana===e.semana && t.pessoa===e.pessoa && t.bloco===e.bloco));
+  $('avisoSincronizacao').hidden=!faltam.length;
+  $('avisoSincronizacao').textContent=faltam.length?'Há '+faltam.length+' tarefa(s) publicada(s) desta seleção aguardando sincronização. NAMOITA pode usar Buscar novas escalas.':'';
+  if(!tasks.length){
+    let mensagem=faltam.length?'As tarefas desta semana ainda não chegaram ao banco. A escala publicada foi encontrada; a sincronização precisa ser concluída.':'Nenhuma tarefa atribuída nesta seleção.';
+    if(semana && !F.profile.is_admin && !faltam.length) {
+      const blocos=publicadas[semana]?.pessoas?.[F.profile.pessoa];
+      if(blocos)mensagem='Nesta semana: DOM/SEG/TER — '+blocos.dom_seg_ter+'; QUI/SEX/SÁB — '+blocos.qui_sex_sab+'.';
+    }
+    box.append(F.element('p',mensagem,'muted'));return;
+  }
   for(const t of tasks) {
     const card=F.element('article',null,`task-card ${t.estado_efetivo}`);
     card.append(F.element('h3',t.tarefa));
@@ -61,12 +82,38 @@ async function carregarAcessos() {
   }
 }
 async function carregar(profile) {
-  dados=await F.rpc('faxina_listar');renderTasks();
+  dados=await F.rpc('faxina_listar');
+  try{publicadas=await F.escalasPublicadas();}catch(e){$('appStatus').textContent=F.errorMessage(e);}
+  atualizarSemanas();renderTasks();
   if(profile.is_admin)await carregarAcessos();
 }
-$('filtroPessoa').onchange=renderTasks;
+function semanaAtual() {
+  const partes=new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+  const valor=t=>partes.find(p=>p.type===t).value;
+  const d=new Date(valor('year')+'-'+valor('month')+'-'+valor('day')+'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate()-d.getUTCDay());return d.toISOString().slice(0,10);
+}
+function atualizarSemanas() {
+  const seletor=$('filtroSemana'), anterior=seletor.value;
+  const semanas=[...new Set([...dados.map(t=>t.semana),...Object.keys(publicadas).filter(s=>s>='2026-09-27')])].sort().reverse();
+  seletor.replaceChildren(F.element('option','Todas as semanas'));seletor.firstChild.value='';
+  for(const semana of semanas){const option=F.element('option','Semana de '+F.day(semana));option.value=semana;seletor.append(option);}
+  if(seguirSemanaAtual){const atual=semanaAtual();seletor.value=semanas.includes(atual)?atual:semanas.find(s=>s<=atual)||semanas[0]||'';}
+  else seletor.value=semanas.includes(anterior)?anterior:'';
+}
+$('filtroSemana').onchange=()=>{seguirSemanaAtual=false;renderTasks();};
+$('sincronizarEscala').onclick=async()=>{
+  const btn=$('sincronizarEscala');btn.disabled=true;$('appStatus').textContent='Buscando a escala mais recente…';
+  try{
+    await F.rpc('faxina_sincronizar_agora');await carregar(F.profile);
+    $('appStatus').textContent='Consulta atualizada. Confira a semana selecionada.';
+  }catch(e){
+    $('appStatus').textContent=/schema cache|Could not find|does not exist/i.test(String(e.message))?'A correção de sincronização do servidor ainda precisa ser aplicada. Consulte o guia desta atualização.':F.errorMessage(e);
+  }finally{btn.disabled=false;}
+};
 $('copiarCodigo').onclick=async()=>{
   try {await navigator.clipboard.writeText($('codigoGerado').dataset.code);$('adminStatus').textContent='Código copiado.';}
   catch{$('adminStatus').textContent='Selecione o código acima e copie manualmente.';}
 };
 F.start(carregar);
+

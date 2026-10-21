@@ -4,7 +4,8 @@ let multas=[];
 function render() {
   const pessoa=F.profile.is_admin?$('filtroPessoa').value:F.profile.pessoa;
   const mes=$('mes').value;
-  const filtradas=multas.filter(m=>(!pessoa || m.pessoa===pessoa) && (!mes || m.dia_vencimento.startsWith(mes)));
+  const semana=$('semanaMulta').value;
+  const filtradas=multas.filter(m=>(!pessoa || m.pessoa===pessoa) && (!mes || m.dia_vencimento.startsWith(mes)) && (!semana || m.semana===semana));
   const summary=$('resumoMultas');summary.replaceChildren();
   const months=new Map();
   for(const m of filtradas) {
@@ -27,6 +28,13 @@ function render() {
 }
 async function carregar() {
   const dados=await F.rpc('faxina_listar');multas=dados.filter(m=>Number(m.valor_multa)>0);
+  const semanaSelecionada=$('semanaMulta').value;
+  $('semanaMulta').replaceChildren(F.element('option','Todas as semanas'));
+  $('semanaMulta').firstChild.value='';
+  for(const semana of [...new Set(dados.map(t=>t.semana))].sort().reverse()) {
+    const option=F.element('option','Semana de '+F.day(semana));option.value=semana;$('semanaMulta').append(option);
+  }
+  if([...$('semanaMulta').options].some(o=>o.value===semanaSelecionada))$('semanaMulta').value=semanaSelecionada;
   const selected=$('mes').value;$('mes').replaceChildren(F.element('option','Todos os meses'));$('mes').firstChild.value='';
   for(const key of [...new Set(multas.map(m=>m.dia_vencimento.slice(0,7)))].sort().reverse()) {
     const option=F.element('option',new Date(key+'-01T12:00:00Z').toLocaleDateString('pt-BR',{month:'long',year:'numeric',timeZone:'UTC'}));option.value=key;$('mes').append(option);
@@ -34,5 +42,6 @@ async function carregar() {
   if([...$('mes').options].some(o=>o.value===selected))$('mes').value=selected;
   render();
 }
-$('mes').onchange=render;$('filtroPessoa').onchange=render;
+$('semanaMulta').onchange=render;$('mes').onchange=render;$('filtroPessoa').onchange=render;
 F.start(carregar);
+

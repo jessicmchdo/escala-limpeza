@@ -39,7 +39,8 @@ window.Faxinas = (() => {
         $('loginCard').hidden=!!profile; $('appCard').hidden=!profile;
         if($('adminCard'))$('adminCard').hidden=!(profile?.is_admin);
         if(profile) {
-          $('adminFiltro').hidden=!profile.is_admin;
+          if($('adminFiltro'))$('adminFiltro').hidden=!profile.is_admin;
+          document.querySelectorAll('[data-admin-only]').forEach(el=>el.hidden=!profile.is_admin);
           $('saudacao').textContent=profile.is_admin?'Olá, NAMOITA':`Olá, ${profile.pessoa}`;
           await render(profile);
         }
@@ -87,5 +88,11 @@ window.Faxinas = (() => {
       await update();
     }catch(e){showError(e);$('retry').hidden=false;}
   }
-  return {$,names,money,day,deadline,element,rpc,start,errorMessage,get profile(){return profile;}};
+  async function escalasPublicadas() {
+    const response=await fetch('../escalas.json?consulta='+Date.now(),{cache:'no-store'});
+    if(!response.ok)throw new Error('Não foi possível conferir a escala publicada.');
+    return response.json();
+  }
+  return {$,names,money,day,deadline,element,rpc,start,errorMessage,escalasPublicadas,get profile(){return profile;}};
 })();
+
