@@ -9,6 +9,8 @@ def main():
     base = Path(__file__).resolve().parent
     url = os.environ['SUPABASE_URL'].rstrip('/')
     key = os.environ['SUPABASE_SERVICE_ROLE_KEY']
+    if not url or not key:
+        raise RuntimeError('Configure SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY nos Secrets do GitHub Actions.')
     headers = {'apikey': key, 'Authorization': f'Bearer {key}', 'Content-Type': 'application/json'}
     escalas = json.loads((base / 'escalas.json').read_text(encoding='utf-8'))
     response = requests.post(url + '/rest/v1/rpc/faxina_sincronizar_escalas',
@@ -19,3 +21,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
